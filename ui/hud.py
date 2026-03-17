@@ -31,17 +31,17 @@ class HUD:
                 break
             pos = self.hud_positions[i]
             is_local = character.player_id == local_player_id
-            self._draw_player_hud(character, pos, is_local)
+            self._draw_player_hud(character, pos, is_local, game_state)
 
         self._draw_controls_hint()
         if game_state is not None:
             self._draw_match_info(game_state)
 
-    def _draw_player_hud(self, character, pos, is_local):
+    def _draw_player_hud(self, character, pos, is_local, game_state):
         x, y = pos
         color = character.color
 
-        box_rect = pygame.Rect(x - 80, y - 40, 160, 90)
+        box_rect = pygame.Rect(x - 90, y - 52, 180, 112)
         pygame.draw.rect(self.screen, (30, 30, 35), box_rect, border_radius=10)
 
         border_width = 3 if is_local else 1
@@ -54,9 +54,22 @@ class HUD:
         damage_color = self._get_damage_color(character.damage_percent)
         damage_text = f"{int(character.damage_percent)}%"
         damage_surface = self.font_large.render(damage_text, True, damage_color)
-        self.screen.blit(damage_surface, damage_surface.get_rect(center=(x, y + 15)))
+        self.screen.blit(damage_surface, damage_surface.get_rect(center=(x, y + 6)))
 
-        self._draw_stocks(x, y + 40, character.stocks, color)
+        coins_text = f"Coins: {self._get_player_coins(character.player_id, game_state)}"
+        coins_surface = self.font_small.render(coins_text, True, Colors.YELLOW)
+        self.screen.blit(coins_surface, coins_surface.get_rect(center=(x, y + 34)))
+
+        self._draw_stocks(x, y + 56, character.stocks, color)
+
+    def _get_player_coins(self, player_id, game_state):
+        if game_state is None:
+            return 0
+
+        player = game_state.get_player(player_id)
+        if not player:
+            return 0
+        return player.coins
 
     def _draw_stocks(self, x, y, stocks, color):
         if stocks < 0:

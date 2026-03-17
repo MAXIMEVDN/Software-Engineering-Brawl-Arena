@@ -64,6 +64,9 @@ class BaseCharacter:
         # Actieve aanval
         self.active_attack = None
         self.attack_frame = 0
+        self.last_attacker_id = None
+        self.last_attacker_timer = 0
+        self.gameplay_events = []
 
         # Kleur (voor het tekenen)
         self.color = Colors.PLAYER_COLORS[player_id % len(Colors.PLAYER_COLORS)]
@@ -230,6 +233,10 @@ class BaseCharacter:
             self.invincible -= 1
         if self.dash_cooldown_timer > 0:
             self.dash_cooldown_timer -= 1
+        if self.last_attacker_timer > 0:
+            self.last_attacker_timer -= 1
+            if self.last_attacker_timer <= 0:
+                self.last_attacker_id = None
         if self.is_dashing:
             self.dash_frames -= 1
             if self.dash_frames <= 0:
@@ -403,12 +410,15 @@ class BaseCharacter:
             self.active_attack = None
             self.attack_cooldown = CharacterStats.ATTACK_COOLDOWN
 
-    def take_damage(self, damage, knockback_base, knockback_scaling, angle, attacker_x):
+    def take_damage(self, damage, knockback_base, knockback_scaling, angle, attacker_x, attacker_id=None):
         # Ontvang schade: verhoog damage% en vlieg weg (knockback).
         if self.invincible > 0:
             return
 
         self.damage_percent += damage
+        if attacker_id is not None and attacker_id != self.player_id:
+            self.last_attacker_id = attacker_id
+            self.last_attacker_timer = 300
 
         # Knockback-formule: hoe meer schade, hoe verder weggeslagen
         defense_points = self.build_stats["defense"]
@@ -427,6 +437,13 @@ class BaseCharacter:
 
     def die(self):
         # Verlies een leven en respawn als er nog levens over zijn.
+        killer_id = self.last_attacker_id if self.last_attacker_id != self.player_id else None
+        self.gameplay_events.append({
+            "type": "death",
+            "player_id": self.player_id,
+            "killer_id": killer_id,
+        })
+
         if self.stocks < 0:
             self.respawn()
             return
@@ -434,6 +451,9 @@ class BaseCharacter:
         self.stocks -= 1
         if self.stocks > 0:
             self.respawn()
+        else:
+            self.last_attacker_id = None
+            self.last_attacker_timer = 0
 
     def respawn(self):
         # Zet de character terug op de startpositie.
@@ -448,6 +468,13 @@ class BaseCharacter:
         self.invincible = 120  # 2 seconden onkwetsbaar (120 frames bij 60 fps)
         self.active_attack = None
         self.jumps_remaining = self.max_jumps
+        self.last_attacker_id = None
+        self.last_attacker_timer = 0
+
+    def consume_gameplay_events(self):
+        events = list(self.gameplay_events)
+        self.gameplay_events.clear()
+        return events
 
     def _update_animation_state(self):
         # Bepaal welke animatie afgespeeld wordt op basis van wat de character doet.
@@ -545,3 +572,6 @@ class BaseCharacter:
 
         attack_state = state.get("active_attack")
         self.active_attack = Attack.from_dict(attack_state) if attack_state else None
+        self.last_attacker_id = None
+        self.last_attacker_timer = 0
+        self.gameplay_events = []

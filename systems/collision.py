@@ -49,7 +49,8 @@ class CollisionSystem:
             knockback_base=attack.knockback_base,
             knockback_scaling=attack.knockback_scaling,
             angle=attack.knockback_angle,
-            attacker_x=attacker.x
+            attacker_x=attacker.x,
+            attacker_id=attacker.player_id,
         )
 
         # Maak een treffer-event aan voor visuele effecten

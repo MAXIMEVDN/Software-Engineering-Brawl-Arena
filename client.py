@@ -245,6 +245,9 @@ class Game:
         for platform in self.platforms:
             platform.draw(self.screen, self.camera_offset)
 
+        for coin in self.game_state.map_coins:
+            coin.draw(self.screen, self.camera_offset)
+
         self.effects.draw(self.screen, self.camera_offset)
 
         for character in self._get_all_characters():

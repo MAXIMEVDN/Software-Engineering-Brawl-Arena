@@ -2,18 +2,27 @@
 Game State - Centrale game state voor server en client.
 """
 
+import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from entities.base_character import BaseCharacter
+from entities.coin_pickup import CoinPickup
 from entities.platform import Platform
 from entities.warrior import Warrior
 from config import (
+    COINS_LOST_ON_DEATH,
+    COINS_PER_KILL,
+    COINS_PER_ROUND,
     DEFAULT_BUILD_STATS,
     FINAL_ROUND_STOCKS,
     FPS,
     INFINITE_STOCKS,
+    MAP_COIN_RADIUS,
+    MAP_COIN_SPAWN_INTERVAL,
     MAX_PLAYERS,
+    MAX_MAP_COINS,
+    MAP_COIN_VALUE,
     PRELIMINARY_ROUND_DURATION,
     PRELIMINARY_ROUNDS,
     SPAWN_POSITIONS,
@@ -32,6 +41,7 @@ class PlayerData:
     connected: bool = True
     build_stats: Dict[str, int] = None
     stats_locked: bool = False
+    coins: int = 0
 
     def __post_init__(self):
         if self.build_stats is None:
@@ -56,6 +66,9 @@ class GameState:
         self.preliminary_round_duration: int = PRELIMINARY_ROUND_DURATION
         self.final_round_stocks: int = FINAL_ROUND_STOCKS
         self.is_final_round: bool = False
+        self.map_coins: List[CoinPickup] = []
+        self.coin_spawn_timer: int = 0
+        self.next_coin_id: int = 1
 
     def _create_platforms(self) -> List[Platform]:
         return [Platform.from_tuple(p) for p in STAGE_PLATFORMS]
@@ -82,6 +95,7 @@ class GameState:
             self.players[player_id].stats_locked = False
             self.players[player_id].build_stats = dict(DEFAULT_BUILD_STATS)
             self.players[player_id].character = None
+            self.players[player_id].coins = 0
             return player_id
 
         self.players[player_id] = PlayerData(player_id=player_id)
@@ -134,11 +148,13 @@ class GameState:
         self.is_final_round = False
         self.stocks_per_player = INFINITE_STOCKS
         self.stat_select_remaining_frames = self.stat_select_total_frames
+        self._reset_map_coins()
         for player in self.get_connected_players():
             player.ready = False
             player.stats_locked = False
             player.character = None
             player.build_stats = dict(DEFAULT_BUILD_STATS)
+            player.coins = 0
 
     def start_game(self) -> None:
         self.phase = "playing"
@@ -148,6 +164,7 @@ class GameState:
         self.stat_select_remaining_frames = 0
         self.is_final_round = False
         self.stocks_per_player = INFINITE_STOCKS
+        self._reset_map_coins()
 
         for i, player in enumerate(self.get_connected_players()):
             spawn = SPAWN_POSITIONS[i % len(SPAWN_POSITIONS)]
@@ -175,10 +192,14 @@ class GameState:
         if self.phase != "playing":
             return events
 
+        self._process_character_coin_events()
+        self._collect_map_coins()
+        self._update_map_coin_spawns()
         self.game_timer += 1
 
         if not self.is_final_round:
             if self.game_timer >= self.preliminary_round_duration:
+                self._award_round_coins()
                 if self.round_number < self.preliminary_rounds:
                     self._advance_preliminary_round()
                     events.append({"type": "round_advanced", "round_number": self.round_number})
@@ -203,6 +224,7 @@ class GameState:
     def reset_round(self) -> None:
         self.winner = None
         self.game_timer = 0
+        self._reset_map_coins()
 
         for i, player in enumerate(self.get_connected_players()):
             if not player.character:
@@ -224,6 +246,79 @@ class GameState:
             player.character.jumps_remaining = player.character.max_jumps
             player.character.attack_cooldown = 0
             player.character.attack_frame = 0
+
+    def _reset_map_coins(self) -> None:
+        self.map_coins = []
+        self.coin_spawn_timer = 0
+        self.next_coin_id = 1
+
+    def _process_character_coin_events(self) -> None:
+        for player in self.get_connected_players():
+            if not player.character:
+                continue
+
+            for event in player.character.consume_gameplay_events():
+                if event.get("type") != "death":
+                    continue
+
+                player.coins -= COINS_LOST_ON_DEATH
+                killer_id = event.get("killer_id")
+                killer = self.players.get(killer_id) if killer_id is not None else None
+                if killer and killer.connected and killer.player_id != player.player_id:
+                    killer.coins += COINS_PER_KILL
+
+    def _collect_map_coins(self) -> None:
+        remaining_coins = []
+        for coin in self.map_coins:
+            collected = False
+            for player in self.get_connected_players():
+                if not player.character:
+                    continue
+                if player.character.get_rect().colliderect(coin.get_rect()):
+                    player.coins += coin.value
+                    collected = True
+                    break
+
+            if not collected:
+                remaining_coins.append(coin)
+
+        self.map_coins = remaining_coins
+
+    def _update_map_coin_spawns(self) -> None:
+        if len(self.map_coins) >= MAX_MAP_COINS:
+            return
+
+        self.coin_spawn_timer += 1
+        if self.coin_spawn_timer < MAP_COIN_SPAWN_INTERVAL:
+            return
+
+        self.coin_spawn_timer = 0
+        self.map_coins.append(self._create_random_coin())
+
+    def _create_random_coin(self) -> CoinPickup:
+        radius = MAP_COIN_RADIUS
+
+        for _ in range(12):
+            platform = random.choice(self.platforms)
+            min_x = int(platform.x + radius)
+            max_x = int(platform.x + platform.width - radius)
+            if min_x > max_x:
+                continue
+
+            x = random.randint(min_x, max_x)
+            y = int(platform.y - radius - 8)
+            if all(abs(existing.x - x) > radius * 3 or abs(existing.y - y) > radius * 3 for existing in self.map_coins):
+                coin = CoinPickup(self.next_coin_id, x, y, MAP_COIN_VALUE, radius)
+                self.next_coin_id += 1
+                return coin
+
+        fallback_coin = CoinPickup(self.next_coin_id, 640, 260, MAP_COIN_VALUE, radius)
+        self.next_coin_id += 1
+        return fallback_coin
+
+    def _award_round_coins(self) -> None:
+        for player in self.get_connected_players():
+            player.coins += COINS_PER_ROUND
 
     def _advance_preliminary_round(self) -> None:
         self.round_number += 1
@@ -271,10 +366,13 @@ class GameState:
                     "connected": player.connected,
                     "build_stats": dict(player.build_stats),
                     "stats_locked": player.stats_locked,
+                    "coins": player.coins,
                     "character_state": player.character.get_state() if player.character else None,
                 }
                 for pid, player in self.players.items()
             },
+            "map_coins": [coin.to_dict() for coin in self.map_coins],
+            "coin_spawn_timer": self.coin_spawn_timer,
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
@@ -289,6 +387,9 @@ class GameState:
         self.preliminary_round_duration = data.get("preliminary_round_duration", PRELIMINARY_ROUND_DURATION)
         self.final_round_stocks = data.get("final_round_stocks", FINAL_ROUND_STOCKS)
         self.stocks_per_player = self.final_round_stocks if self.is_final_round else INFINITE_STOCKS
+        self.map_coins = [CoinPickup.from_dict(coin_data) for coin_data in data.get("map_coins", [])]
+        self.coin_spawn_timer = data.get("coin_spawn_timer", 0)
+        self.next_coin_id = max((coin.coin_id for coin in self.map_coins), default=0) + 1
 
         seen_player_ids = set()
         for pid_str, pdata in data["players"].items():
@@ -304,6 +405,7 @@ class GameState:
             player.connected = pdata["connected"]
             player.build_stats = dict(pdata.get("build_stats", DEFAULT_BUILD_STATS))
             player.stats_locked = pdata.get("stats_locked", False)
+            player.coins = pdata.get("coins", 0)
 
             if pdata["character_state"]:
                 if player.character is None:
