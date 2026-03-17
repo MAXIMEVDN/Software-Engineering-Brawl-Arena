@@ -217,11 +217,13 @@ class Game:
             self._render_game_over()
 
     def _load_background(self, path):
-        if not os.path.exists(path):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        full_path = os.path.join(base_dir, path)
+        if not os.path.exists(full_path):
             return None
 
         try:
-            image = pygame.image.load(path).convert()
+            image = pygame.image.load(full_path).convert()
         except pygame.error:
             return None
 
