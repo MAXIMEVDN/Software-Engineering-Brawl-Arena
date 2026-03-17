@@ -1,22 +1,13 @@
 """
-Network module - Client-side netwerk communicatie en lobby discovery.
+Network module - Client-side netwerk communicatie.
 """
 
 import pickle
 import socket
 import threading
-import time
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional
 
-from config import (
-    SERVER_IP,
-    SERVER_PORT,
-    DISCOVERY_PORT,
-    BUFFER_SIZE,
-    CONNECTION_TIMEOUT,
-    DISCOVERY_TIMEOUT,
-    DISCOVERY_TOKEN,
-)
+from config import SERVER_IP, SERVER_PORT, BUFFER_SIZE, CONNECTION_TIMEOUT
 
 
 class Network:
@@ -33,13 +24,10 @@ class Network:
         self.connected = False
         self._lock = threading.Lock()
 
-    def connect(self, password: str) -> bool:
+    def connect(self) -> bool:
         try:
             self.client.connect(self.addr)
-            self.client.sendall(pickle.dumps({
-                "type": "join_lobby",
-                "data": {"password": password},
-            }))
+            self.client.sendall(pickle.dumps({"type": "join_lobby", "data": {}}))
 
             data = self.client.recv(BUFFER_SIZE)
             response = pickle.loads(data)
@@ -52,7 +40,6 @@ class Network:
             self.connected = True
             print(f"Verbonden met server als Player {self.player_id}")
             return True
-
         except socket.timeout:
             print("Verbinding timeout - server niet bereikbaar")
             return False
@@ -95,42 +82,3 @@ class Network:
 
     def get_player_id(self) -> Optional[int]:
         return self.player_id
-
-
-def discover_lobbies(timeout: float = DISCOVERY_TIMEOUT) -> List[Dict[str, Any]]:
-    request = {
-        "token": DISCOVERY_TOKEN,
-        "type": "discover_lobbies",
-    }
-    discovered = {}
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.settimeout(0.2)
-
-    end_time = time.time() + timeout
-    try:
-        sock.sendto(pickle.dumps(request), ("255.255.255.255", DISCOVERY_PORT))
-
-        while time.time() < end_time:
-            try:
-                payload, addr = sock.recvfrom(BUFFER_SIZE)
-            except socket.timeout:
-                continue
-
-            response = pickle.loads(payload)
-            if response.get("token") != DISCOVERY_TOKEN:
-                continue
-
-            lobby = response.get("lobby")
-            if not lobby:
-                continue
-
-            lobby["ip"] = lobby.get("ip") or addr[0]
-            discovered[lobby["ip"]] = lobby
-    except OSError:
-        return []
-    finally:
-        sock.close()
-
-    return sorted(discovered.values(), key=lambda lobby: lobby.get("ip", ""))

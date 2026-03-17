@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -20,7 +21,7 @@ from config import (
 )
 from entities.platform import Platform
 from game_state import GameState
-from network import Network, discover_lobbies
+from network import Network
 from systems.collision import CollisionSystem
 from systems.effects import EffectsSystem
 from ui.character_select import CharacterSelect
@@ -41,7 +42,7 @@ class Game:
         self.state = "menu"
         self.network = None
         self.server_process = None
-        self.host_password = ""
+        self.host_ip = ""
         self.is_local = False
 
         self.game_state = GameState()
@@ -111,13 +112,11 @@ class Game:
 
         action = result.get("action")
         if action == "host":
-            self._start_host(result["password"])
+            self._start_host()
         elif action == "join":
-            self._join_lobby(result["lobby"]["ip"], result["password"])
+            self._join_lobby(result["ip"])
         elif action == "local":
             self._start_local_game()
-        elif action == "refresh_lobbies":
-            self.menu.set_lobbies(discover_lobbies())
         elif action == "cancel_waiting":
             self._return_to_menu()
 
@@ -317,14 +316,14 @@ class Game:
         }
         opponent.stats_locked = True
 
-    def _start_host(self, password):
-        self.host_password = password
+    def _start_host(self):
+        self.host_ip = self._get_local_ip()
         if not (self.server_process and self.server_process.poll() is None):
             server_script = os.path.join(os.path.dirname(__file__), "server.py")
             creation_flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
             try:
                 self.server_process = subprocess.Popen(
-                    [sys.executable, server_script, "--password", password],
+                    [sys.executable, server_script],
                     cwd=os.path.dirname(server_script),
                     creationflags=creation_flags,
                 )
@@ -335,9 +334,9 @@ class Game:
 
         for _ in range(12):
             self.network = Network("127.0.0.1")
-            if self.network.connect(password):
+            if self.network.connect():
                 self.local_player_id = self.network.get_player_id()
-                self.menu.set_waiting_view(password, 1)
+                self.menu.set_waiting_view(1, self.host_ip)
                 self._sync_with_server(force=True)
                 return
             time.sleep(0.25)
@@ -345,14 +344,14 @@ class Game:
         self.menu.set_error("Kon niet verbinden met de lokale lobby.")
         self.network = None
 
-    def _join_lobby(self, ip, password):
+    def _join_lobby(self, ip):
         self.network = Network(ip)
-        if self.network.connect(password):
+        if self.network.connect():
             self.local_player_id = self.network.get_player_id()
-            self.menu.set_waiting_view(password, len(self.game_state.get_connected_players()))
+            self.menu.set_waiting_view(len(self.game_state.get_connected_players()), ip)
             self._sync_with_server(force=True)
         else:
-            self.menu.set_error("Kon niet joinen. Controleer het wachtwoord.")
+            self.menu.set_error("Kon niet joinen. Controleer het IP-adres.")
             self.network = None
 
     def _update_screen_from_phase(self):
@@ -373,7 +372,7 @@ class Game:
             self.state = "game_over"
         elif self.network and self.network.is_connected():
             player_count = len(self.game_state.get_connected_players())
-            self.menu.set_waiting_view(self.host_password or "Hidden", player_count)
+            self.menu.set_waiting_view(player_count, self.host_ip)
             self.state = "menu"
 
     def _sync_with_server(self, force=False):
@@ -413,12 +412,21 @@ class Game:
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
         self.local_character = player.character if player else None
 
+    def _get_local_ip(self):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect(("8.8.8.8", 80))
+            ip = sock.getsockname()[0]
+            sock.close()
+            return ip
+        except OSError:
+            return "127.0.0.1"
+
     def _return_to_menu(self):
         self._disconnect()
         self.state = "menu"
         self.menu = MainMenu(self.screen)
         self.menu.state = "mode_select"
-        self.menu.set_lobbies(discover_lobbies())
 
     def _disconnect(self):
         if self.network:
@@ -437,7 +445,7 @@ class Game:
         self.is_local = False
         self.local_player_id = None
         self.local_character = None
-        self.host_password = ""
+        self.host_ip = ""
         for key in self.pending_network_actions:
             self.pending_network_actions[key] = False
         self.last_network_sync = 0.0
@@ -454,7 +462,6 @@ def main():
     _ = args
 
     game = Game()
-    game.menu.set_lobbies(discover_lobbies())
     game.run()
 
 

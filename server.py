@@ -1,5 +1,5 @@
 """
-Game Server - Centrale multiplayer server met LAN discovery en wachtwoordlobby.
+Game Server - Centrale multiplayer server.
 """
 
 import pickle
@@ -14,8 +14,6 @@ from typing import Any, Dict
 
 from config import (
     BUFFER_SIZE,
-    DISCOVERY_PORT,
-    DISCOVERY_TOKEN,
     FPS,
     MAX_PLAYERS,
     SERVER_PORT,
@@ -63,13 +61,12 @@ class PlayerInputState:
 
 class GameServer:
 
-    def __init__(self, password: str, ip: str = "", port: int = SERVER_PORT):
+    def __init__(self, ip: str = "", port: int = SERVER_PORT):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         self.ip = ip
         self.port = port
-        self.password = password
         self.game_state = GameState()
         self.connections: Dict[int, socket.socket] = {}
         self.input_states: Dict[int, PlayerInputState] = {}
@@ -85,62 +82,11 @@ class GameServer:
             sys.exit(1)
 
         self.socket.listen(MAX_PLAYERS)
-        self.discovery_thread = threading.Thread(target=self._discovery_loop, daemon=True)
         self.game_thread = threading.Thread(target=self._game_loop, daemon=True)
 
         print(f"Server gestart op port {port}")
-        print(f"Lobby beschikbaar op LAN met wachtwoord: {self.password}")
-
-    def _get_local_ip(self) -> str:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.connect(("8.8.8.8", 80))
-            ip = sock.getsockname()[0]
-            sock.close()
-            return ip
-        except OSError:
-            return "127.0.0.1"
-
-    def _can_advertise_lobby(self) -> bool:
-        return self.running and self.game_state.phase == "lobby" and self.game_state.active_player_count() < MAX_PLAYERS
-
-    def _discovery_loop(self) -> None:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("", DISCOVERY_PORT))
-
-        while self.running:
-            try:
-                payload, addr = sock.recvfrom(BUFFER_SIZE)
-                request = pickle.loads(payload)
-            except Exception:
-                continue
-
-            if request.get("token") != DISCOVERY_TOKEN or request.get("type") != "discover_lobbies":
-                continue
-
-            if not self._can_advertise_lobby():
-                continue
-
-            response = {
-                "token": DISCOVERY_TOKEN,
-                "lobby": {
-                    "ip": self._get_local_ip(),
-                    "player_count": self.game_state.active_player_count(),
-                    "max_players": MAX_PLAYERS,
-                    "phase": self.game_state.phase,
-                    "requires_password": True,
-                },
-            }
-            try:
-                sock.sendto(pickle.dumps(response), addr)
-            except OSError:
-                continue
-
-        sock.close()
 
     def start(self) -> None:
-        self.discovery_thread.start()
         self.game_thread.start()
 
         while self.running:
@@ -168,11 +114,6 @@ class GameServer:
             message = pickle.loads(data)
             if message.get("type") != "join_lobby":
                 conn.sendall(pickle.dumps({"ok": False, "error": "Ongeldige lobby handshake"}))
-                return None
-
-            provided_password = str(message.get("data", {}).get("password", ""))
-            if provided_password != self.password:
-                conn.sendall(pickle.dumps({"ok": False, "error": "Wachtwoord klopt niet"}))
                 return None
 
             with self.state_lock:
@@ -298,23 +239,19 @@ class GameServer:
 
 
 def main() -> None:
-    password = "arena"
     port = SERVER_PORT
 
     args = sys.argv[1:]
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg == "--password" and i + 1 < len(args):
-            password = args[i + 1]
-            i += 2
-        elif arg == "--port" and i + 1 < len(args):
+        if arg == "--port" and i + 1 < len(args):
             port = int(args[i + 1])
             i += 2
         else:
             i += 1
 
-    server = GameServer(password=password, port=port)
+    server = GameServer(port=port)
     server.start()
 
 

@@ -11,7 +11,6 @@ class Button:
         self.callback = callback
         self.hovered = False
         self.font = pygame.font.Font(None, font_size)
-
         self.color_normal = (70, 80, 90)
         self.color_hover = (105, 120, 145)
 
@@ -28,7 +27,6 @@ class Button:
         color = self.color_hover if self.hovered else self.color_normal
         pygame.draw.rect(screen, color, self.rect, border_radius=12)
         pygame.draw.rect(screen, Colors.WHITE, self.rect, 2, border_radius=12)
-
         text_surface = self.font.render(self.text, True, Colors.WHITE)
         screen.blit(text_surface, text_surface.get_rect(center=self.rect.center))
 
@@ -64,57 +62,6 @@ class TextInput:
         screen.blit(surface, surface.get_rect(midleft=(self.rect.left + 12, self.rect.centery)))
 
 
-class LobbyList:
-
-    def __init__(self):
-        self.font = pygame.font.Font(None, 28)
-        self.small_font = pygame.font.Font(None, 22)
-        self.selected_index = 0
-        self.rows = []
-
-    def set_lobbies(self, lobbies):
-        self.rows = lobbies
-        if self.selected_index >= len(self.rows):
-            self.selected_index = 0
-
-    def get_selected(self):
-        if not self.rows:
-            return None
-        return self.rows[self.selected_index]
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            for index, (_, row_rect) in enumerate(self._iter_row_rects()):
-                if row_rect.collidepoint(event.pos):
-                    self.selected_index = index
-                    break
-        elif event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_UP, pygame.K_w) and self.rows:
-                self.selected_index = (self.selected_index - 1) % len(self.rows)
-            elif event.key in (pygame.K_DOWN, pygame.K_s) and self.rows:
-                self.selected_index = (self.selected_index + 1) % len(self.rows)
-
-    def _iter_row_rects(self):
-        x = SCREEN_WIDTH // 2 - 220
-        y = 250
-        for index, lobby in enumerate(self.rows):
-            rect = pygame.Rect(x, y + (index * 64), 440, 52)
-            yield lobby, rect
-
-    def draw(self, screen):
-        for index, (lobby, rect) in enumerate(self._iter_row_rects()):
-            selected = index == self.selected_index
-            bg = (72, 88, 110) if selected else (44, 48, 58)
-            border = Colors.WHITE if selected else Colors.GRAY
-            pygame.draw.rect(screen, bg, rect, border_radius=10)
-            pygame.draw.rect(screen, border, rect, 2, border_radius=10)
-
-            title = f"Lobby {index + 1}  |  {lobby['player_count']}/{lobby['max_players']} spelers"
-            ip_text = lobby.get("ip", "unknown")
-            screen.blit(self.font.render(title, True, Colors.WHITE), (rect.left + 14, rect.top + 10))
-            screen.blit(self.small_font.render(ip_text, True, Colors.LIGHT_GRAY), (rect.left + 14, rect.top + 30))
-
-
 class MainMenu:
 
     def __init__(self, screen):
@@ -123,16 +70,13 @@ class MainMenu:
         self.result = None
         self.error_message = ""
         self.info_message = ""
-        self.lobbies = []
 
         self.title_font = pygame.font.Font(None, 88)
         self.subtitle_font = pygame.font.Font(None, 36)
         self.body_font = pygame.font.Font(None, 28)
         self.small_font = pygame.font.Font(None, 22)
 
-        self.password_input = TextInput(SCREEN_WIDTH // 2, 310, 340, 48, "Kies een wachtwoord")
-        self.join_password_input = TextInput(SCREEN_WIDTH // 2, 560, 340, 48, "Voer lobby wachtwoord in")
-        self.lobby_list = LobbyList()
+        self.join_ip_input = TextInput(SCREEN_WIDTH // 2, 360, 360, 48, "Host IP (bijv. 192.168.1.42)")
 
         self._create_buttons()
 
@@ -145,14 +89,13 @@ class MainMenu:
         ]
 
         self.host_buttons = [
-            Button(center_x, 390, 240, 52, "Create Lobby", self._on_create_lobby),
+            Button(center_x, 390, 240, 52, "Start Host", self._on_create_lobby),
             Button(center_x, 458, 180, 44, "Back", self._on_back_to_mode),
         ]
 
         self.join_buttons = [
-            Button(center_x - 110, 630, 180, 44, "Refresh", self._on_refresh_lobbies),
-            Button(center_x + 110, 630, 180, 44, "Join Lobby", self._on_join_lobby),
-            Button(center_x, 682, 180, 40, "Back", self._on_back_to_mode),
+            Button(center_x, 480, 220, 48, "Join Lobby", self._on_join_lobby),
+            Button(center_x, 542, 180, 40, "Back", self._on_back_to_mode),
         ]
 
         self.wait_buttons = [
@@ -176,47 +119,29 @@ class MainMenu:
         self.info_message = ""
 
     def _on_create_lobby(self):
-        password = self.password_input.text.strip()
-        if not password:
-            self.error_message = "Kies eerst een wachtwoord."
+        self.result = {"action": "host"}
+
+    def _on_join_lobby(self):
+        ip = self.join_ip_input.text.strip()
+        if not ip:
+            self.error_message = "Voer het host IP in."
             return
-        self.result = {"action": "host", "password": password}
+        self.result = {"action": "join", "ip": ip}
 
     def _on_local_game(self):
         self.result = {"action": "local"}
 
-    def _on_join_lobby(self):
-        password = self.join_password_input.text.strip()
-        lobby = self.lobby_list.get_selected()
-        if not lobby:
-            self.error_message = "Geen lobby geselecteerd."
-            return
-        if not password:
-            self.error_message = "Voer het wachtwoord in."
-            return
-        self.result = {"action": "join", "password": password, "lobby": lobby}
-
-    def _on_refresh_lobbies(self):
-        self.result = {"action": "refresh_lobbies"}
-
     def _on_cancel_waiting(self):
         self.result = {"action": "cancel_waiting"}
 
-    def set_lobbies(self, lobbies):
-        self.lobbies = lobbies
-        self.lobby_list.set_lobbies(lobbies)
-
-    def set_waiting_view(self, password, player_count):
+    def set_waiting_view(self, player_count, host_ip=""):
         self.state = "host_waiting"
-        self.info_message = f"Lobby live. Wachtwoord: {password} | Players: {player_count}/4"
+        ip_part = f" | IP: {host_ip}" if host_ip else ""
+        self.info_message = f"Lobby live{ip_part} | Players: {player_count}/4"
         self.result = None
 
     def set_error(self, message):
         self.error_message = message
-
-    def clear_messages(self):
-        self.error_message = ""
-        self.info_message = ""
 
     def handle_event(self, event):
         if self.state == "welcome":
@@ -226,12 +151,10 @@ class MainMenu:
             for button in self.mode_buttons:
                 button.handle_event(event)
         elif self.state == "host_setup":
-            self.password_input.handle_event(event)
             for button in self.host_buttons:
                 button.handle_event(event)
         elif self.state == "join_setup":
-            self.join_password_input.handle_event(event)
-            self.lobby_list.handle_event(event)
+            self.join_ip_input.handle_event(event)
             for button in self.join_buttons:
                 button.handle_event(event)
         elif self.state == "host_waiting":
@@ -273,7 +196,6 @@ class MainMenu:
     def _draw_welcome(self):
         subtitle = self.subtitle_font.render("Een snelle arena fighter voor jullie lobby", True, Colors.LIGHT_GRAY)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 250)))
-
         prompt = self.body_font.render("Press ENTER to start", True, Colors.WHITE)
         self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, 420)))
 
@@ -284,24 +206,17 @@ class MainMenu:
             button.draw(self.screen)
 
     def _draw_host_setup(self):
-        label = self.subtitle_font.render("Maak een lobby wachtwoord aan", True, Colors.WHITE)
+        label = self.subtitle_font.render("Start een host lobby", True, Colors.WHITE)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 250)))
-        self.password_input.draw(self.screen)
-        hint = self.small_font.render("Andere spelers hoeven straks alleen dit wachtwoord in te voeren.", True, Colors.GRAY)
+        hint = self.small_font.render("Deel daarna alleen jouw IP met de andere speler.", True, Colors.GRAY)
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 350)))
         for button in self.host_buttons:
             button.draw(self.screen)
 
     def _draw_join_setup(self):
-        label = self.subtitle_font.render("Beschikbare lobbies op dit netwerk", True, Colors.WHITE)
-        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 210)))
-        if self.lobbies:
-            self.lobby_list.draw(self.screen)
-        else:
-            empty = self.body_font.render("Nog geen lobbies gevonden. Gebruik Refresh.", True, Colors.GRAY)
-            self.screen.blit(empty, empty.get_rect(center=(SCREEN_WIDTH // 2, 340)))
-
-        self.join_password_input.draw(self.screen)
+        label = self.subtitle_font.render("Join met host IP", True, Colors.WHITE)
+        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 270)))
+        self.join_ip_input.draw(self.screen)
         for button in self.join_buttons:
             button.draw(self.screen)
 
