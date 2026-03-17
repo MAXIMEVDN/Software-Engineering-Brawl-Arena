@@ -149,7 +149,7 @@ class RoundUpgradeShop:
 
         return None
 
-    def draw(self, player, remaining_seconds, current_round, upcoming_round, is_final_round):
+    def draw(self, player, remaining_seconds, current_round, upcoming_round, is_final_round, player_count, ready_count):
         self.screen.fill((26, 29, 36))
 
         title = self.title_font.render("ROUND UPGRADE SHOP", True, Colors.WHITE)
@@ -172,6 +172,9 @@ class RoundUpgradeShop:
         phase_surface = self.small_font.render(phase_label, True, Colors.LIGHT_GRAY)
         self.screen.blit(phase_surface, (704, 116))
 
+        ready_label = self.small_font.render(f"Ready players: {ready_count}/{player_count}", True, Colors.WHITE)
+        self.screen.blit(ready_label, ready_label.get_rect(topright=(SCREEN_WIDTH - 56, 26)))
+
         left_title = self.header_font.render("Stats", True, Colors.WHITE)
         self.screen.blit(left_title, (56, 142))
 
@@ -184,6 +187,20 @@ class RoundUpgradeShop:
         for card in self.attack_cards:
             card.draw(self.screen, player)
 
-        footer = "Stat upgrades get more expensive each level: 1, 2, 3, 4, 5..."
-        footer_surface = self.small_font.render(footer, True, Colors.LIGHT_GRAY)
+        if player.ready:
+            footer = f"You are ready | Waiting for others: {ready_count}/{player_count}"
+            footer_color = Colors.GREEN
+        else:
+            footer = "Press ENTER when you're done shopping | Stat upgrades cost 1, 2, 3, 4, 5..."
+            footer_color = Colors.LIGHT_GRAY
+
+        footer_surface = self.small_font.render(footer, True, footer_color)
         self.screen.blit(footer_surface, footer_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 30)))
+
+        if player.ready:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((10, 14, 20, 75))
+            self.screen.blit(overlay, (0, 0))
+
+            ready_surface = self.header_font.render("READY", True, footer_color)
+            self.screen.blit(ready_surface, ready_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 62)))

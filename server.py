@@ -185,6 +185,8 @@ class GameServer:
                 self.game_state.select_stats(player_id, data.get("stats", {}))
             elif msg_type == "lock_stats":
                 self.game_state.lock_stats(player_id)
+            elif msg_type == "ready_for_round":
+                self.game_state.set_player_ready(player_id, True)
             elif msg_type == "upgrade_stat":
                 self.game_state.upgrade_stat(player_id, data.get("stat_name", ""))
             elif msg_type == "buy_attack":

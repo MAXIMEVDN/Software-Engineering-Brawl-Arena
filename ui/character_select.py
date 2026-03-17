@@ -142,9 +142,9 @@ class CharacterSelect:
         for control in self.controls:
             control.draw(self.screen, self.local_stats[control.stat_name], STAT_POINT_BUDGET)
 
-        footer = f"Locked players: {locked_count}/{player_count} | ENTER to confirm"
+        footer = f"Locked players: {locked_count}/{player_count} | ENTER when ready"
         if self.confirmed:
-            footer = f"Build locked | Locked players: {locked_count}/{player_count}"
+            footer = f"Build locked | Waiting for others: {locked_count}/{player_count}"
 
         footer_surface = self.small_font.render(footer, True, Colors.LIGHT_GRAY)
         self.screen.blit(footer_surface, footer_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 44)))

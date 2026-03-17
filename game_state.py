@@ -161,6 +161,10 @@ class GameState:
         connected_players = self.get_connected_players()
         return bool(connected_players) and all(player.stats_locked for player in connected_players)
 
+    def all_players_ready(self) -> bool:
+        connected_players = self.get_connected_players()
+        return bool(connected_players) and all(player.ready for player in connected_players)
+
     def start_stat_selection(self) -> None:
         self.phase = "stat_select"
         self.round_number = 1
@@ -225,7 +229,7 @@ class GameState:
             if self.upgrade_shop_remaining_frames > 0:
                 self.upgrade_shop_remaining_frames -= 1
 
-            if self.upgrade_shop_remaining_frames <= 0:
+            if self.upgrade_shop_remaining_frames <= 0 or self.all_players_ready():
                 transition = self.pending_round_transition
                 self.pending_round_transition = None
                 if transition == "final":
@@ -278,6 +282,7 @@ class GameState:
             if not player.character:
                 continue
 
+            player.ready = False
             self._apply_player_build_to_character(player)
             spawn = SPAWN_POSITIONS[i % len(SPAWN_POSITIONS)]
             player.character.x = spawn[0]
@@ -307,6 +312,8 @@ class GameState:
         self.upgrade_shop_remaining_frames = self.upgrade_shop_total_frames
         self.pending_round_transition = transition
         self._reset_map_coins()
+        for player in self.get_connected_players():
+            player.ready = False
 
     def upgrade_stat(self, player_id: int, stat_name: str) -> bool:
         player = self.players.get(player_id)

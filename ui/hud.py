@@ -8,6 +8,7 @@
 import pygame
 
 from config import Colors, SCREEN_HEIGHT, SCREEN_WIDTH, FPS
+from ui.title_text import draw_title_style_text
 
 
 class HUD:
@@ -36,6 +37,7 @@ class HUD:
         self._draw_controls_hint()
         if game_state is not None:
             self._draw_match_info(game_state)
+            self._draw_round_end_countdown(game_state)
 
     def _draw_player_hud(self, character, pos, is_local, game_state):
         x, y = pos
@@ -98,6 +100,18 @@ class HUD:
         surface = self.font_small.render(label, True, Colors.WHITE)
         self.screen.blit(surface, (20, 20))
 
+    def _draw_round_end_countdown(self, game_state):
+        if game_state.phase != "playing" or game_state.is_final_round:
+            return
+
+        remaining_frames = max(0, game_state.preliminary_round_duration - game_state.game_timer)
+        if remaining_frames <= 0:
+            return
+
+        remaining_seconds = (remaining_frames + FPS - 1) // FPS
+        if 1 <= remaining_seconds <= 5:
+            self.draw_center_announcement(str(remaining_seconds), size=138)
+
     def _get_damage_color(self, damage):
         if damage < 50:
             return Colors.WHITE
@@ -139,3 +153,18 @@ class HUD:
 
         hint = self.font_small.render("Press R when ready to start", True, Colors.GRAY)
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 80)))
+
+    def draw_center_announcement(self, text, size=96):
+        overlay_rect = pygame.Rect(0, 0, min(700, SCREEN_WIDTH - 80), 180)
+        overlay_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        panel = pygame.Surface(overlay_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(panel, (8, 10, 16, 150), panel.get_rect(), border_radius=26)
+        pygame.draw.rect(panel, (247, 233, 214, 90), panel.get_rect(), 2, border_radius=26)
+        self.screen.blit(panel, overlay_rect.topleft)
+
+        draw_title_style_text(
+            self.screen,
+            text,
+            overlay_rect.center,
+            size,
+        )

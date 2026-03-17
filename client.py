@@ -71,6 +71,8 @@ class Game:
             "heavy_attack": False,
             "special_attack": False,
         }
+        self.previous_phase = self.game_state.phase
+        self.round_end_banner_frames = 0
 
     def run(self):
         while self.running:
@@ -177,6 +179,13 @@ class Game:
         if not player:
             return
 
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN and not player.ready:
+            self._submit_round_ready()
+            return
+
+        if player.ready:
+            return
+
         action = self.upgrade_shop.handle_event(event, player)
         if not action:
             return
@@ -207,6 +216,8 @@ class Game:
             self._refresh_local_character_ref()
 
     def _update(self):
+        previous_phase = self.game_state.phase
+
         if self.state == "menu":
             self.menu.animate()
 
@@ -221,6 +232,9 @@ class Game:
         if self.state == "playing":
             self._update_game()
 
+        self._handle_phase_change(previous_phase, self.game_state.phase)
+        if self.round_end_banner_frames > 0:
+            self.round_end_banner_frames -= 1
         self._update_screen_from_phase()
 
     def _update_game(self):
@@ -316,7 +330,12 @@ class Game:
             self.game_state.round_number,
             upcoming_round,
             self.game_state.pending_round_transition == "final",
+            len(self.game_state.get_connected_players()),
+            sum(1 for active_player in self.game_state.get_connected_players() if active_player.ready),
         )
+
+        if self.round_end_banner_frames > 0:
+            self.hud.draw_center_announcement("ROUND ENDED", size=84)
 
     def _render_game_over(self):
         if self.game_state.winner is not None:
@@ -356,6 +375,7 @@ class Game:
 
     def _update_local_upgrade_shop(self):
         if self.game_state.phase == "upgrade_shop":
+            self._auto_ready_local_opponents()
             self.game_state.update()
             self._refresh_local_character_ref()
 
@@ -483,6 +503,37 @@ class Game:
                 for key in self.pending_network_actions:
                     self.pending_network_actions[key] = False
 
+    def _submit_round_ready(self):
+        if self.local_player_id is None:
+            return
+
+        if self.is_local:
+            self.game_state.set_player_ready(self.local_player_id, True)
+            return
+
+        if not self.network:
+            return
+
+        response = self.network.send({"type": "ready_for_round", "data": {}})
+        if response and "game_state" in response:
+            self.game_state.from_dict(response["game_state"])
+            self._refresh_local_character_ref()
+
+    def _auto_ready_local_opponents(self):
+        for player in self.game_state.get_connected_players():
+            if player.player_id == self.local_player_id:
+                continue
+            if not player.ready:
+                self.game_state.set_player_ready(player.player_id, True)
+
+    def _handle_phase_change(self, previous_phase, current_phase):
+        if previous_phase == current_phase:
+            return
+
+        self.previous_phase = current_phase
+        if previous_phase == "playing" and current_phase == "upgrade_shop":
+            self.round_end_banner_frames = FPS
+
     def _refresh_local_character_ref(self):
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
         self.local_character = player.character if player else None
@@ -521,6 +572,8 @@ class Game:
         self.local_player_id = None
         self.local_character = None
         self.host_ip = ""
+        self.previous_phase = self.game_state.phase
+        self.round_end_banner_frames = 0
         for key in self.pending_network_actions:
             self.pending_network_actions[key] = False
         self.last_network_sync = 0.0
