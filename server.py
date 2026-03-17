@@ -245,6 +245,9 @@ class GameServer:
                 if self.game_state.all_players_ready():
                     self.game_state.start_game()
                     print("Game gestart!")
+
+            elif msg_type == "restart_game":
+                self.game_state.start_game()
                     
             elif msg_type == "get_state":
                 # Client vraagt huidige state op

@@ -14,7 +14,15 @@ from entities.mage import Mage
 from entities.ninja import Ninja
 from entities.platform import Platform
 from entities.attack import Attack
-from config import STAGE_PLATFORMS, SPAWN_POSITIONS, MAX_PLAYERS
+from config import (
+    STAGE_PLATFORMS,
+    SPAWN_POSITIONS,
+    MAX_PLAYERS,
+    PRELIMINARY_ROUNDS,
+    PRELIMINARY_ROUND_DURATION,
+    FINAL_ROUND_STOCKS,
+    INFINITE_STOCKS,
+)
 
 
 # Character type mapping
@@ -67,8 +75,12 @@ class GameState:
         self.round_number: int = 1
         self.winner: Optional[int] = None
         self.max_players: int = MAX_PLAYERS
-        self.stocks_per_player: int = 3
+        self.stocks_per_player: int = INFINITE_STOCKS
         self.game_timer: int = 0  # Frames sinds game start
+        self.preliminary_rounds: int = PRELIMINARY_ROUNDS
+        self.preliminary_round_duration: int = PRELIMINARY_ROUND_DURATION
+        self.final_round_stocks: int = FINAL_ROUND_STOCKS
+        self.is_final_round: bool = False
     
     def _create_platforms(self) -> List[Platform]:
         """
@@ -161,8 +173,11 @@ class GameState:
     def start_game(self) -> None:
         """Start de game met geselecteerde characters."""
         self.phase = "playing"
+        self.round_number = 1
         self.game_timer = 0
         self.winner = None
+        self.is_final_round = False
+        self.stocks_per_player = INFINITE_STOCKS
         
         # Spawn characters
         for i, (player_id, player_data) in enumerate(self.players.items()):
@@ -189,11 +204,21 @@ class GameState:
         self.game_timer += 1
         
         # Check for winner
+        if not self.is_final_round:
+            if self.game_timer >= self.preliminary_round_duration:
+                if self.round_number < self.preliminary_rounds:
+                    self._advance_preliminary_round()
+                    events.append({"type": "round_advanced", "round_number": self.round_number})
+                else:
+                    self._start_final_round()
+                    events.append({"type": "final_round_started", "round_number": self.round_number})
+            return events
+
         alive_players = [
             p for p in self.players.values()
             if p.connected and p.character and p.character.stocks > 0
         ]
-        
+
         if len(alive_players) <= 1 and len(self.get_connected_players()) >= 2:
             if alive_players:
                 self.winner = alive_players[0].player_id
@@ -204,13 +229,12 @@ class GameState:
     
     def reset_round(self) -> None:
         """Reset voor een nieuwe ronde."""
-        self.round_number += 1
         self.winner = None
         self.game_timer = 0
         
         # Reset characters
         for i, player_data in enumerate(self.players.values()):
-            if player_data.character:
+            if player_data.connected and player_data.character:
                 spawn = SPAWN_POSITIONS[i % len(SPAWN_POSITIONS)]
                 player_data.character.x = spawn[0]
                 player_data.character.y = spawn[1]
@@ -218,6 +242,25 @@ class GameState:
                 player_data.character.vel_y = 0
                 player_data.character.damage_percent = 0
                 player_data.character.stocks = self.stocks_per_player
+                player_data.character.hitstun = 0
+                player_data.character.invincible = 120
+                player_data.character.active_attack = None
+                player_data.character.is_dashing = False
+                player_data.character.dash_frames = 0
+                player_data.character.dash_cooldown_timer = 0
+
+    def _advance_preliminary_round(self) -> None:
+        """Ga naar de volgende preliminary round."""
+        self.round_number += 1
+        self.stocks_per_player = INFINITE_STOCKS
+        self.reset_round()
+
+    def _start_final_round(self) -> None:
+        """Start de finale waarin spelers beperkte levens hebben."""
+        self.round_number = self.preliminary_rounds + 1
+        self.is_final_round = True
+        self.stocks_per_player = self.final_round_stocks
+        self.reset_round()
     
     # =========================================================================
     # GETTERS
@@ -272,6 +315,10 @@ class GameState:
             "round_number": self.round_number,
             "winner": self.winner,
             "game_timer": self.game_timer,
+            "is_final_round": self.is_final_round,
+            "preliminary_rounds": self.preliminary_rounds,
+            "preliminary_round_duration": self.preliminary_round_duration,
+            "final_round_stocks": self.final_round_stocks,
             "players": {
                 pid: {
                     "player_id": p.player_id,
@@ -296,6 +343,11 @@ class GameState:
         self.round_number = data["round_number"]
         self.winner = data["winner"]
         self.game_timer = data["game_timer"]
+        self.is_final_round = data.get("is_final_round", False)
+        self.preliminary_rounds = data.get("preliminary_rounds", PRELIMINARY_ROUNDS)
+        self.preliminary_round_duration = data.get("preliminary_round_duration", PRELIMINARY_ROUND_DURATION)
+        self.final_round_stocks = data.get("final_round_stocks", FINAL_ROUND_STOCKS)
+        self.stocks_per_player = self.final_round_stocks if self.is_final_round else INFINITE_STOCKS
         
         for pid_str, pdata in data["players"].items():
             pid = int(pid_str)

@@ -7,7 +7,7 @@
 
 import pygame
 
-from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT
+from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT, FPS
 
 
 class HUD:
@@ -26,7 +26,7 @@ class HUD:
             (850, SCREEN_HEIGHT - 80),
         ]
 
-    def draw(self, characters, local_player_id=0):
+    def draw(self, characters, local_player_id=0, game_state=None):
         # Teken de HUD voor alle characters.
         for i, character in enumerate(characters):
             if i >= len(self.hud_positions):
@@ -36,6 +36,8 @@ class HUD:
             self._draw_player_hud(character, pos, is_local)
 
         self._draw_controls_hint()
+        if game_state is not None:
+            self._draw_match_info(game_state)
 
     def _draw_player_hud(self, character, pos, is_local):
         # Teken de HUD-box voor één speler.
@@ -66,6 +68,11 @@ class HUD:
 
     def _draw_stocks(self, x, y, stocks, color):
         # Teken een cirkeltje per resterend leven.
+        if stocks < 0:
+            text = self.font_medium.render("∞", True, color)
+            self.screen.blit(text, text.get_rect(center=(x, y)))
+            return
+
         spacing = 20
         start_x = x - (stocks * spacing) // 2
 
@@ -73,6 +80,20 @@ class HUD:
             stock_x = start_x + i * spacing + 10
             pygame.draw.circle(self.screen, color, (stock_x, y), 6)
             pygame.draw.circle(self.screen, Colors.WHITE, (stock_x, y), 6, 1)
+
+    def _draw_match_info(self, game_state):
+        # Toon welke round actief is en hoeveel tijd nog resteert.
+        if game_state.is_final_round:
+            label = f"Final Round | Stocks: {game_state.final_round_stocks}"
+        else:
+            seconds_left = max(0, (game_state.preliminary_round_duration - game_state.game_timer) // FPS)
+            label = (
+                f"Round {game_state.round_number}/{game_state.preliminary_rounds}"
+                f" | Infinite lives | {seconds_left}s"
+            )
+
+        surface = self.font_small.render(label, True, Colors.WHITE)
+        self.screen.blit(surface, (20, 20))
 
     def _get_damage_color(self, damage):
         # Bepaal de kleur van het schadenpercentage:

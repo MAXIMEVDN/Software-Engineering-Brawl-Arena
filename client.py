@@ -47,6 +47,7 @@ class Game:
         self.game_state = GameState()
         self.local_player_id = 0
         self.local_character = None
+        self.winner = None
 
         # Systemen
         self.collision = CollisionSystem()
@@ -205,9 +206,14 @@ class Game:
             if char and char.is_dashing:
                 self.effects.add_trail(char.x, char.y, char.width, char.height, char.color)
 
-        # Controleer of de game voorbij is (lokale modus)
+        # Laat de gedeelde GameState ook lokaal de rondes/finale beheren.
         if self.is_local:
-            self._check_game_over(self._get_all_characters())
+            self.game_state.update()
+            if self.game_state.phase == "game_over":
+                self.state = "game_over"
+                winner_id = self.game_state.winner
+                winner_player = self.game_state.get_player(winner_id) if winner_id is not None else None
+                self.winner = winner_player.character if winner_player else None
 
         # Synchroniseer met de server (netwerkmodus)
         if self.network and self.network.is_connected():
@@ -219,13 +225,6 @@ class Game:
             return [p.character for p in self.game_state.players.values() if p.character is not None]
         else:
             return self.game_state.get_characters()
-
-    def _check_game_over(self, characters):
-        # Controleer of de game voorbij is (lokale modus).
-        alive = [c for c in characters if c.stocks > 0]
-        if len(alive) <= 1 and len(characters) >= 2:
-            self.state = "game_over"
-            self.winner = alive[0] if alive else None
 
     def _render(self):
         # Teken het huidige scherm.
@@ -251,7 +250,7 @@ class Game:
         for character in self._get_all_characters():
             character.draw(self.screen, self.camera_offset)
 
-        self.hud.draw(self._get_all_characters(), self.local_player_id)
+        self.hud.draw(self._get_all_characters(), self.local_player_id, self.game_state)
 
         # Wachtinformatie tonen als de game nog niet begonnen is
         if self.game_state.phase == "lobby":
@@ -280,6 +279,7 @@ class Game:
         # Start een lokale testgame (geen netwerk nodig).
         self.is_local = True
         self.is_host = True
+        self.winner = None
         self.state = "char_select"
 
     def _start_host(self):
@@ -331,15 +331,10 @@ class Game:
         player.character_type = character_type
 
         if self.is_local:
-            # Maak het character-object aan voor lokale modus
-            spawn = SPAWN_POSITIONS[self.local_player_id % len(SPAWN_POSITIONS)]
-            char_class = CHARACTER_CLASSES.get(character_type, Warrior)
-            self.local_character = char_class(spawn[0], spawn[1], self.local_player_id)
-            player.character = self.local_character
-
             # Voeg een lokale tegenstander toe voor testing
-            self._add_local_opponent()
-            self.game_state.phase = "playing"
+            self._add_local_opponent(character_type)
+            self.game_state.start_game()
+            self._refresh_local_character_ref()
         else:
             # Stuur de keuze naar de server
             self.local_character = None
@@ -354,14 +349,13 @@ class Game:
 
         self.state = "playing"
 
-    def _add_local_opponent(self):
+    def _add_local_opponent(self, local_type):
         # Voeg een tweede speler toe voor lokale testing.
         opponent_id = 1
         spawn = SPAWN_POSITIONS[opponent_id]
 
         # Kies een ander character-type dan de speler
         all_types = ["Warrior", "Mage", "Ninja"]
-        local_type = self.local_character.get_character_name()
         opponent_type = [t for t in all_types if t != local_type][0]
 
         char_class = CHARACTER_CLASSES.get(opponent_type, Mage)
@@ -388,13 +382,19 @@ class Game:
 
     def _restart_game(self):
         # Herstart de game.
-        for player in self.game_state.players.values():
-            if player.character:
-                player.character.respawn()
-                player.character.stocks = 3
+        self.winner = None
+        if self.is_local:
+            self.game_state.start_game()
+            self._refresh_local_character_ref()
+            self.state = "playing"
+            return
 
-        self.state = "playing"
-        self.game_state.phase = "playing"
+        if self.network:
+            response = self.network.send({"type": "restart_game", "data": {}})
+            if response and "game_state" in response:
+                self.game_state.from_dict(response["game_state"])
+                self._refresh_local_character_ref()
+                self.state = "playing"
 
     def _sync_with_server(self):
         # Synchroniseer de game-state met de server.
@@ -440,7 +440,6 @@ class Game:
                 self.state = "game_over"
             elif self.state == "game_over" and self.game_state.phase == "playing":
                 self.state = "playing"
-
     def _refresh_local_character_ref(self):
         # Zorg dat local_character altijd wijst naar de gesynchroniseerde state.
         player = self.game_state.get_player(self.local_player_id)

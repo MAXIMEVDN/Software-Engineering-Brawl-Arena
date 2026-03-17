@@ -9,6 +9,11 @@ SCREEN_HEIGHT = 720
 FPS = 60
 GAME_TITLE = "Brawl Arena"
 
+PRELIMINARY_ROUNDS = 5
+PRELIMINARY_ROUND_DURATION = 45 * FPS
+FINAL_ROUND_STOCKS = 5
+INFINITE_STOCKS = -1
+
 
 class Colors:
     # Alle kleuren die in de game gebruikt worden (RGB).

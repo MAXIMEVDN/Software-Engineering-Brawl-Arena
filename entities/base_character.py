@@ -331,6 +331,10 @@ class BaseCharacter:
 
     def die(self):
         # Verlies een leven en respawn als er nog levens over zijn.
+        if self.stocks < 0:
+            self.respawn()
+            return
+
         self.stocks -= 1
         if self.stocks > 0:
             self.respawn()
