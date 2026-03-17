@@ -81,6 +81,11 @@ class BaseCharacter:
             "knockback": 0,
             "range": 0,
         }
+        self.equipped_attacks = {
+            "light": None,
+            "heavy": None,
+            "special": None,
+        }
 
     def light_attack(self):
         # Geeft een Attack-object terug voor de lichte aanval.
@@ -103,6 +108,10 @@ class BaseCharacter:
         for stat_name in self.build_stats:
             self.build_stats[stat_name] = max(0, int(stats.get(stat_name, self.build_stats[stat_name])))
         self._apply_build_modifiers()
+
+    def set_equipped_attacks(self, equipped_attacks):
+        for slot in self.equipped_attacks:
+            self.equipped_attacks[slot] = equipped_attacks.get(slot, self.equipped_attacks[slot])
 
     def _apply_build_modifiers(self):
         # Vertaal build-stats naar movement- en combatmodifiers.
@@ -546,6 +555,7 @@ class BaseCharacter:
             "attack_frame": self.attack_frame,
             "character_type": self.get_character_name(),
             "build_stats": dict(self.build_stats),
+            "equipped_attacks": dict(self.equipped_attacks),
             "active_attack": self.active_attack.to_dict() if self.active_attack else None,
         }
 
@@ -569,6 +579,7 @@ class BaseCharacter:
         self.attack_cooldown = state.get("attack_cooldown", 0)
         self.attack_frame = state.get("attack_frame", 0)
         self.set_build_stats(state.get("build_stats", {}))
+        self.set_equipped_attacks(state.get("equipped_attacks", {}))
 
         attack_state = state.get("active_attack")
         self.active_attack = Attack.from_dict(attack_state) if attack_state else None

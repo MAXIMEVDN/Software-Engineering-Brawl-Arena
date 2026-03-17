@@ -185,6 +185,12 @@ class GameServer:
                 self.game_state.select_stats(player_id, data.get("stats", {}))
             elif msg_type == "lock_stats":
                 self.game_state.lock_stats(player_id)
+            elif msg_type == "upgrade_stat":
+                self.game_state.upgrade_stat(player_id, data.get("stat_name", ""))
+            elif msg_type == "buy_attack":
+                self.game_state.buy_attack(player_id, data.get("attack_id", ""))
+            elif msg_type == "equip_attack":
+                self.game_state.equip_attack(player_id, data.get("attack_id", ""))
 
             return {
                 "type": "state",

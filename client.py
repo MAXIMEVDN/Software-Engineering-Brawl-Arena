@@ -27,6 +27,7 @@ from systems.effects import EffectsSystem
 from ui.character_select import CharacterSelect
 from ui.hud import HUD
 from ui.menu import MainMenu
+from ui.upgrade_shop import RoundUpgradeShop
 
 
 class Game:
@@ -56,6 +57,7 @@ class Game:
         self.menu = MainMenu(self.screen)
         self.hud = HUD(self.screen)
         self.stat_select = CharacterSelect(self.screen)
+        self.upgrade_shop = RoundUpgradeShop(self.screen)
 
         self.camera_offset = (0, 0)
         self.last_network_sync = 0.0
@@ -87,7 +89,7 @@ class Game:
                 return
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if self.state in ("playing", "stat_select"):
+                if self.state in ("playing", "stat_select", "upgrade_shop"):
                     self._return_to_menu()
                 elif self.network:
                     self._return_to_menu()
@@ -99,6 +101,8 @@ class Game:
                 self._handle_menu_event(event)
             elif self.state == "stat_select":
                 self._handle_stat_select_event(event)
+            elif self.state == "upgrade_shop":
+                self._handle_upgrade_shop_event(event)
             elif self.state == "playing":
                 self._handle_game_event(event)
             elif self.state == "game_over":
@@ -168,12 +172,48 @@ class Game:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._return_to_menu()
 
+    def _handle_upgrade_shop_event(self, event):
+        player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
+        if not player:
+            return
+
+        action = self.upgrade_shop.handle_event(event, player)
+        if not action:
+            return
+
+        action_type = action["type"]
+        if self.is_local:
+            if action_type == "upgrade_stat":
+                self.game_state.upgrade_stat(self.local_player_id, action["stat_name"])
+            elif action_type == "buy_attack":
+                self.game_state.buy_attack(self.local_player_id, action["attack_id"])
+            elif action_type == "equip_attack":
+                self.game_state.equip_attack(self.local_player_id, action["attack_id"])
+            self._refresh_local_character_ref()
+            return
+
+        if not self.network:
+            return
+
+        payload = {"type": action_type, "data": {}}
+        if action_type == "upgrade_stat":
+            payload["data"]["stat_name"] = action["stat_name"]
+        else:
+            payload["data"]["attack_id"] = action["attack_id"]
+
+        response = self.network.send(payload)
+        if response and "game_state" in response:
+            self.game_state.from_dict(response["game_state"])
+            self._refresh_local_character_ref()
+
     def _update(self):
         if self.network and self.network.is_connected():
             self._sync_with_server()
 
         if self.is_local and self.state == "stat_select":
             self._update_local_stat_select()
+        elif self.is_local and self.state == "upgrade_shop":
+            self._update_local_upgrade_shop()
 
         if self.state == "playing":
             self._update_game()
@@ -211,6 +251,8 @@ class Game:
             self._render_stat_select()
         elif self.state == "playing":
             self._render_game()
+        elif self.state == "upgrade_shop":
+            self._render_upgrade_shop()
         elif self.state == "game_over":
             self._render_game()
             self._render_game_over()
@@ -255,6 +297,24 @@ class Game:
 
         self.hud.draw(self._get_all_characters(), self.local_player_id or 0, self.game_state)
 
+    def _render_upgrade_shop(self):
+        player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
+        if not player:
+            self.screen.fill(Colors.BG_COLOR)
+            return
+
+        upcoming_round = self.game_state.round_number + 1
+        if self.game_state.pending_round_transition == "final":
+            upcoming_round = self.game_state.preliminary_rounds + 1
+
+        self.upgrade_shop.draw(
+            player,
+            self.game_state.get_upgrade_shop_seconds_remaining(),
+            self.game_state.round_number,
+            upcoming_round,
+            self.game_state.pending_round_transition == "final",
+        )
+
     def _render_game_over(self):
         if self.game_state.winner is not None:
             winner_id = self.game_state.winner
@@ -290,6 +350,11 @@ class Game:
             self.game_state.update()
             if self.game_state.phase != "stat_select":
                 self._finalize_local_stat_selection()
+
+    def _update_local_upgrade_shop(self):
+        if self.game_state.phase == "upgrade_shop":
+            self.game_state.update()
+            self._refresh_local_character_ref()
 
     def _finalize_local_stat_selection(self):
         player = self.game_state.get_player(self.local_player_id)
@@ -361,6 +426,8 @@ class Game:
         if self.is_local:
             if self.game_state.phase == "stat_select":
                 self.state = "stat_select"
+            elif self.game_state.phase == "upgrade_shop":
+                self.state = "upgrade_shop"
             elif self.game_state.phase == "playing":
                 self.state = "playing"
             elif self.game_state.phase == "game_over":
@@ -369,6 +436,8 @@ class Game:
 
         if self.game_state.phase == "stat_select":
             self.state = "stat_select"
+        elif self.game_state.phase == "upgrade_shop":
+            self.state = "upgrade_shop"
         elif self.game_state.phase == "playing":
             self.state = "playing"
         elif self.game_state.phase == "game_over":

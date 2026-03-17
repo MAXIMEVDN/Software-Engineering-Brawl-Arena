@@ -7,7 +7,7 @@
 #   Special - Spinning Slash (grote hitbox, diagonaal omhoog)
 
 from entities.base_character import BaseCharacter
-from config import AttackData
+from config import ATTACK_SHOP_INDEX, AttackData
 
 
 class Warrior(BaseCharacter):
@@ -24,8 +24,36 @@ class Warrior(BaseCharacter):
     def get_character_name(self):
         return "Warrior"
 
+    def _create_shop_attack(self, slot):
+        attack_id = self.equipped_attacks.get(slot)
+        if not attack_id:
+            return None
+
+        attack_data = ATTACK_SHOP_INDEX.get(attack_id)
+        if not attack_data or attack_data["slot"] != slot:
+            return None
+
+        return self._create_attack(
+            name=attack_data["name"],
+            damage=attack_data["damage"],
+            knockback_base=attack_data["knockback_base"],
+            knockback_scaling=attack_data["knockback_scaling"],
+            knockback_angle=attack_data["knockback_angle"],
+            startup_frames=attack_data["startup_frames"],
+            active_frames=attack_data["active_frames"],
+            recovery_frames=attack_data["recovery_frames"],
+            hitbox_width=attack_data["hitbox_width"],
+            hitbox_height=attack_data["hitbox_height"],
+            hitbox_offset_x=attack_data["hitbox_offset_x"],
+            hitbox_offset_y=attack_data["hitbox_offset_y"],
+        )
+
     def light_attack(self):
         # Snelle punch: weinig schade, snel herstel, goed als combo-starter.
+        shop_attack = self._create_shop_attack("light")
+        if shop_attack:
+            return shop_attack
+
         return self._create_attack(
             name="Quick Punch",
             damage=AttackData.LIGHT["damage"],
@@ -43,6 +71,10 @@ class Warrior(BaseCharacter):
 
     def heavy_attack(self):
         # Krachtige kick: veel schade en knockback, maar traag.
+        shop_attack = self._create_shop_attack("heavy")
+        if shop_attack:
+            return shop_attack
+
         return self._create_attack(
             name="Power Kick",
             damage=AttackData.HEAVY["damage"],
@@ -60,6 +92,10 @@ class Warrior(BaseCharacter):
 
     def special_attack(self):
         # Spinning Slash: grote hitbox, raakt aan beide kanten, schiet omhoog.
+        shop_attack = self._create_shop_attack("special")
+        if shop_attack:
+            return shop_attack
+
         return self._create_attack(
             name="Spinning Slash",
             damage=AttackData.SPECIAL["damage"] + 2,
