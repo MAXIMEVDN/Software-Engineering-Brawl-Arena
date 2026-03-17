@@ -63,7 +63,7 @@ class Game:
         self.last_network_sync = 0.0
         self.network_sync_interval = 1.0 / max(1, NETWORK_TICK_RATE)
 
-        self.background = self._load_background("assets/backgrounds/background_day.png")
+        self.background = self._load_background("assets/backgrounds/background_purple.png")
         self.pending_network_actions = {
             "jump": False,
             "dash": False,
@@ -207,6 +207,9 @@ class Game:
             self._refresh_local_character_ref()
 
     def _update(self):
+        if self.state == "menu":
+            self.menu.animate()
+
         if self.network and self.network.is_connected():
             self._sync_with_server()
 

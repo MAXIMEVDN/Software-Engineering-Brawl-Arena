@@ -1,6 +1,13 @@
+import os
+
 import pygame
 
 from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 
 class Button:
@@ -64,6 +71,12 @@ class TextInput:
 
 class MainMenu:
 
+    MENU_BG_PATH = "assets/backgrounds/homepage background/Free-Mountain-Backgrounds-Pixel-Art5.png"
+    MENU_TITLE_PATH = "assets/backgrounds/homepage background/text-1773773015478.png"
+    KNIGHT_GIF_PATH = "assets/sprites/homepage knight gif/14693.gif"
+    KNIGHT_FRAME_DIR = "assets/sprites/homepage knight gif/14693"
+    TITLE_ACCENT_COLOR = (247, 233, 214)
+
     def __init__(self, screen):
         self.screen = screen
         self.state = "welcome"
@@ -77,6 +90,12 @@ class MainMenu:
         self.small_font = pygame.font.Font(None, 22)
 
         self.join_ip_input = TextInput(SCREEN_WIDTH // 2, 360, 360, 48, "Host IP (bijv. 192.168.1.42)")
+        self.background = self._load_background(self.MENU_BG_PATH)
+        self.title_image = self._load_title_image()
+        self.knight_frames = self._load_knight_frames()
+        self.knight_frame_index = 0
+        self.knight_frame_timer = 0
+        self.knight_frame_duration = 10
 
         self._create_buttons()
 
@@ -101,6 +120,109 @@ class MainMenu:
         self.wait_buttons = [
             Button(center_x, 610, 180, 44, "Cancel", self._on_cancel_waiting),
         ]
+
+    def _resolve_path(self, relative_path):
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base_dir, relative_path)
+
+    def _load_background(self, relative_path):
+        full_path = self._resolve_path(relative_path)
+        if not os.path.exists(full_path):
+            return None
+
+        try:
+            image = pygame.image.load(full_path).convert()
+        except pygame.error:
+            return None
+
+        image_ratio = image.get_width() / max(1, image.get_height())
+        target_ratio = SCREEN_WIDTH / SCREEN_HEIGHT
+
+        if image_ratio > target_ratio:
+            scaled_height = SCREEN_HEIGHT
+            scaled_width = int(scaled_height * image_ratio)
+        else:
+            scaled_width = SCREEN_WIDTH
+            scaled_height = int(scaled_width / max(image_ratio, 0.001))
+
+        scaled = pygame.transform.scale(image, (scaled_width, scaled_height))
+        crop_x = max(0, (scaled_width - SCREEN_WIDTH) // 2)
+        crop_y = max(0, (scaled_height - SCREEN_HEIGHT) // 2)
+        return scaled.subsurface((crop_x, crop_y, SCREEN_WIDTH, SCREEN_HEIGHT)).copy()
+
+    def _load_single_surface(self, full_path):
+        try:
+            return pygame.image.load(full_path).convert_alpha()
+        except pygame.error:
+            return None
+
+    def _load_title_image(self):
+        full_path = self._resolve_path(self.MENU_TITLE_PATH)
+        if not os.path.exists(full_path):
+            return None
+
+        title_surface = self._load_single_surface(full_path)
+        if not title_surface:
+            return None
+
+        max_width = 520
+        scale = min(1.0, max_width / max(1, title_surface.get_width()))
+        scaled_size = (
+            max(1, int(title_surface.get_width() * scale)),
+            max(1, int(title_surface.get_height() * scale)),
+        )
+        return pygame.transform.scale(title_surface, scaled_size)
+
+    def _load_frames_from_directory(self, directory_path):
+        if not os.path.isdir(directory_path):
+            return []
+
+        frame_paths = sorted(
+            os.path.join(directory_path, name)
+            for name in os.listdir(directory_path)
+            if name.lower().endswith((".png", ".webp", ".bmp"))
+        )
+        return [frame for path in frame_paths if (frame := self._load_single_surface(path))]
+
+    def _load_gif_frames(self, full_path):
+        if Image is None or not os.path.exists(full_path):
+            return []
+
+        frames = []
+        try:
+            with Image.open(full_path) as gif:
+                frame_count = getattr(gif, "n_frames", 1)
+                for frame_index in range(frame_count):
+                    gif.seek(frame_index)
+                    frame_rgba = gif.convert("RGBA")
+                    surface = pygame.image.fromstring(frame_rgba.tobytes(), frame_rgba.size, "RGBA").convert_alpha()
+                    frames.append(surface)
+        except Exception:
+            return []
+        return frames
+
+    def _load_knight_frames(self):
+        gif_full_path = self._resolve_path(self.KNIGHT_GIF_PATH)
+        frame_dir = self._resolve_path(self.KNIGHT_FRAME_DIR)
+
+        frames = self._load_gif_frames(gif_full_path)
+        if not frames:
+            frames = self._load_frames_from_directory(frame_dir)
+        if not frames and os.path.exists(gif_full_path):
+            single_frame = self._load_single_surface(gif_full_path)
+            if single_frame:
+                frames = [single_frame]
+
+        if not frames:
+            return []
+
+        scaled_frames = []
+        target_height = 230
+        for frame in frames:
+            scale = target_height / max(1, frame.get_height())
+            scaled_width = max(1, int(frame.get_width() * scale))
+            scaled_frames.append(pygame.transform.scale(frame, (scaled_width, target_height)))
+        return scaled_frames
 
     def _show_host_setup(self):
         self.state = "host_setup"
@@ -143,6 +265,15 @@ class MainMenu:
     def set_error(self, message):
         self.error_message = message
 
+    def animate(self):
+        if len(self.knight_frames) <= 1:
+            return
+
+        self.knight_frame_timer += 1
+        if self.knight_frame_timer >= self.knight_frame_duration:
+            self.knight_frame_timer = 0
+            self.knight_frame_index = (self.knight_frame_index + 1) % len(self.knight_frames)
+
     def handle_event(self, event):
         if self.state == "welcome":
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
@@ -167,11 +298,10 @@ class MainMenu:
         return result
 
     def draw(self):
-        self.screen.fill(Colors.BG_COLOR)
-        self._draw_background_panels()
-
-        title = self.title_font.render("BRAWL ARENA", True, Colors.WHITE)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 110)))
+        self._draw_scene_background()
+        if self.state != "welcome":
+            self._draw_background_panels()
+        self._draw_title()
 
         if self.state == "welcome":
             self._draw_welcome()
@@ -188,44 +318,73 @@ class MainMenu:
             surface = self.body_font.render(self.error_message, True, Colors.RED)
             self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 32)))
 
+    def _draw_scene_background(self):
+        if self.background:
+            self.screen.blit(self.background, (0, 0))
+        else:
+            self.screen.fill(Colors.BG_COLOR)
+
+        sky_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        sky_overlay.fill((18, 24, 40, 54))
+        self.screen.blit(sky_overlay, (0, 0))
+
+        if self.knight_frames:
+            knight = self.knight_frames[self.knight_frame_index]
+            knight_rect = knight.get_rect(bottomleft=(78, SCREEN_HEIGHT - 42))
+            self.screen.blit(knight, knight_rect)
+
+    def _draw_title(self):
+        title_position = (SCREEN_WIDTH // 2, 118)
+        if self.title_image:
+            title_rect = self.title_image.get_rect(center=title_position)
+            self.screen.blit(self.title_image, title_rect)
+            return
+
+        title_shadow = self.title_font.render("Brawl Arena", True, (18, 24, 38))
+        title = self.title_font.render("Brawl Arena", True, Colors.WHITE)
+        self.screen.blit(title_shadow, title_shadow.get_rect(center=(title_position[0] + 3, title_position[1] + 3)))
+        self.screen.blit(title, title.get_rect(center=title_position))
+
     def _draw_background_panels(self):
         panel = pygame.Rect(140, 170, SCREEN_WIDTH - 280, SCREEN_HEIGHT - 240)
-        pygame.draw.rect(self.screen, (28, 32, 40), panel, border_radius=24)
-        pygame.draw.rect(self.screen, (72, 78, 95), panel, 2, border_radius=24)
+        panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
+        pygame.draw.rect(panel_surface, (20, 24, 34, 120), panel_surface.get_rect(), border_radius=28)
+        pygame.draw.rect(panel_surface, (155, 165, 202, 170), panel_surface.get_rect(), 2, border_radius=28)
+        self.screen.blit(panel_surface, panel.topleft)
 
     def _draw_welcome(self):
-        subtitle = self.subtitle_font.render("Een snelle arena fighter voor jullie lobby", True, Colors.LIGHT_GRAY)
-        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 250)))
-        prompt = self.body_font.render("Press ENTER to start", True, Colors.WHITE)
-        self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, 420)))
+        subtitle = self.subtitle_font.render("Een snelle arena fighter voor jullie lobby", True, self.TITLE_ACCENT_COLOR)
+        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 200)))
+        prompt = self.body_font.render("Press ENTER to start", True, self.TITLE_ACCENT_COLOR)
+        self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, 238)))
 
     def _draw_mode_select(self):
-        subtitle = self.subtitle_font.render("Kies hoe je de lobby wilt openen", True, Colors.LIGHT_GRAY)
-        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 250)))
+        subtitle = self.subtitle_font.render("Kies hoe je de lobby wilt openen", True, self.TITLE_ACCENT_COLOR)
+        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         for button in self.mode_buttons:
             button.draw(self.screen)
 
     def _draw_host_setup(self):
         label = self.subtitle_font.render("Start een host lobby", True, Colors.WHITE)
-        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 250)))
+        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         hint = self.small_font.render("Deel daarna alleen jouw IP met de andere speler.", True, Colors.GRAY)
-        self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 350)))
+        self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 312)))
         for button in self.host_buttons:
             button.draw(self.screen)
 
     def _draw_join_setup(self):
         label = self.subtitle_font.render("Join met host IP", True, Colors.WHITE)
-        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 270)))
+        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self.join_ip_input.draw(self.screen)
         for button in self.join_buttons:
             button.draw(self.screen)
 
     def _draw_host_waiting(self):
         label = self.subtitle_font.render("Lobby geopend", True, Colors.WHITE)
-        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 250)))
+        self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         info = self.body_font.render(self.info_message, True, Colors.LIGHT_GRAY)
-        self.screen.blit(info, info.get_rect(center=(SCREEN_WIDTH // 2, 330)))
+        self.screen.blit(info, info.get_rect(center=(SCREEN_WIDTH // 2, 300)))
         hint = self.body_font.render("Zodra minstens 2 spelers binnen zijn begint de 30s statfase automatisch.", True, Colors.WHITE)
-        self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 390)))
+        self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 352)))
         for button in self.wait_buttons:
             button.draw(self.screen)
