@@ -8,7 +8,6 @@
 #   Special - Shadow Strike (snelle dash-aanval met snelheidsboost)
 
 from entities.base_character import BaseCharacter
-from entities.attack import Attack
 from config import AttackData
 
 
@@ -36,7 +35,7 @@ class Ninja(BaseCharacter):
 
     def light_attack(self):
         # Rapid Strike: extreem snel, weinig schade, snel herstel voor combo's.
-        attack = Attack(
+        return self._create_attack(
             name="Rapid Strike",
             damage=AttackData.LIGHT["damage"] - 2,
             knockback_base=AttackData.LIGHT["knockback_base"] - 1,
@@ -50,12 +49,10 @@ class Ninja(BaseCharacter):
             hitbox_offset_x=5,
             hitbox_offset_y=15,
         )
-        attack.owner_id = self.player_id
-        return attack
 
     def heavy_attack(self):
         # Diving Kick: diagonale trap, groot verticaal bereik voor luchtaanvallen.
-        attack = Attack(
+        return self._create_attack(
             name="Diving Kick",
             damage=AttackData.HEAVY["damage"] - 2,
             knockback_base=AttackData.HEAVY["knockback_base"],
@@ -69,12 +66,10 @@ class Ninja(BaseCharacter):
             hitbox_offset_x=5,
             hitbox_offset_y=5,
         )
-        attack.owner_id = self.player_id
-        return attack
 
     def special_attack(self):
         # Shadow Strike: dash-aanval die ook een snelheidsboost geeft.
-        attack = Attack(
+        attack = self._create_attack(
             name="Shadow Strike",
             damage=AttackData.SPECIAL["damage"],
             knockback_base=AttackData.SPECIAL["knockback_base"] + 2,
@@ -88,7 +83,6 @@ class Ninja(BaseCharacter):
             hitbox_offset_x=10,
             hitbox_offset_y=10,
         )
-        attack.owner_id = self.player_id
 
         # Shadow Strike geeft ook een snelheidsboost vooruit
         direction = 1 if self.facing_right else -1

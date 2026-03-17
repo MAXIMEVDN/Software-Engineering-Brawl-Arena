@@ -1,183 +1,150 @@
-# Character Select - keuzemenu voor het selecteren van een character.
-#
-# Spelers kiezen hier hun character voordat de match begint.
-# Navigeren met pijltjestoetsen of muis, bevestigen met Enter/Spatie.
-
 import pygame
 
-from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT
+from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT, BUILD_STAT_NAMES, STAT_POINT_BUDGET
 
 
-class CharacterOption:
-    # Eén selecteerbaar character in het keuzemenu.
+STAT_DISPLAY = {
+    "power": {"label": "Power", "color": (218, 90, 90)},
+    "defense": {"label": "Defense", "color": (92, 178, 118)},
+    "mobility": {"label": "Mobility", "color": (98, 148, 226)},
+    "knockback": {"label": "Knockback", "color": (230, 168, 74)},
+    "range": {"label": "Range", "color": (180, 112, 220)},
+}
 
-    def __init__(self, name, description, color, stats, x, y):
-        self.name = name
-        self.description = description
-        self.color = color
-        self.stats = stats          # {"speed": 5, "power": 7, "defense": 6}
-        self.rect = pygame.Rect(x - 100, y - 120, 200, 240)
-        self.selected = False
-        self.hovered = False
 
-    def draw(self, screen, font, small_font):
-        # Teken de character-optie met preview, naam, beschrijving en stats.
+class StatControl:
 
-        # Achtergrond
-        bg_color = (60, 65, 75) if self.hovered else (45, 50, 60)
-        pygame.draw.rect(screen, bg_color, self.rect, border_radius=12)
+    def __init__(self, stat_name, x, y, width=720, height=64):
+        self.stat_name = stat_name
+        self.meta = STAT_DISPLAY[stat_name]
+        self.rect = pygame.Rect(x, y, width, height)
+        self.minus_rect = pygame.Rect(x + width - 128, y + 12, 40, 40)
+        self.plus_rect = pygame.Rect(x + width - 56, y + 12, 40, 40)
+        self.bar_rect = pygame.Rect(x + 200, y + 23, 260, 18)
+        self.font = pygame.font.Font(None, 30)
+        self.small_font = pygame.font.Font(None, 22)
 
-        # Rand (gekleurd als geselecteerd of gehoverd)
-        border_color = self.color if (self.selected or self.hovered) else Colors.GRAY
-        border_width = 3 if self.selected else 2
-        pygame.draw.rect(screen, border_color, self.rect, border_width, border_radius=12)
+    def handle_event(self, event):
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return None
+        if self.minus_rect.collidepoint(event.pos):
+            return -1
+        if self.plus_rect.collidepoint(event.pos):
+            return 1
+        return None
 
-        # Character-preview (gekleurde rechthoek als placeholder)
-        preview_rect = pygame.Rect(self.rect.centerx - 40, self.rect.top + 20, 80, 80)
-        pygame.draw.rect(screen, self.color, preview_rect, border_radius=8)
+    def draw(self, screen, value, max_fill):
+        pygame.draw.rect(screen, (36, 40, 50), self.rect, border_radius=14)
+        pygame.draw.rect(screen, (86, 92, 110), self.rect, 2, border_radius=14)
 
-        # Naam
-        name_surface = font.render(self.name, True, Colors.WHITE)
-        screen.blit(name_surface, name_surface.get_rect(
-            center=(self.rect.centerx, self.rect.top + 120)))
+        icon_rect = pygame.Rect(self.rect.left + 16, self.rect.top + 12, 40, 40)
+        pygame.draw.rect(screen, self.meta["color"], icon_rect, border_radius=10)
 
-        # Beschrijving
-        desc_surface = small_font.render(self.description, True, Colors.GRAY)
-        screen.blit(desc_surface, desc_surface.get_rect(
-            center=(self.rect.centerx, self.rect.top + 145)))
+        label = self.font.render(self.meta["label"], True, Colors.WHITE)
+        screen.blit(label, (self.rect.left + 72, self.rect.top + 10))
+        value_text = self.small_font.render(f"{value} pts", True, Colors.LIGHT_GRAY)
+        screen.blit(value_text, (self.rect.left + 72, self.rect.top + 34))
 
-        # Statbalkjes
-        self._draw_stats(screen, small_font)
+        pygame.draw.rect(screen, Colors.DARK_GRAY, self.bar_rect, border_radius=9)
+        fill_width = int(self.bar_rect.width * (value / max_fill)) if max_fill > 0 else 0
+        fill_rect = pygame.Rect(self.bar_rect.left, self.bar_rect.top, fill_width, self.bar_rect.height)
+        pygame.draw.rect(screen, self.meta["color"], fill_rect, border_radius=9)
 
-    def _draw_stats(self, screen, font):
-        # Teken een balkje per stat.
-        stat_y = self.rect.top + 165
-        bar_width = 80
-        bar_height = 8
-
-        for stat_name, stat_value in self.stats.items():
-            # Naam van de stat
-            label = font.render(stat_name.capitalize(), True, Colors.LIGHT_GRAY)
-            screen.blit(label, (self.rect.left + 15, stat_y))
-
-            # Leeg balkje
-            bar_rect = pygame.Rect(self.rect.right - bar_width - 15, stat_y + 2, bar_width, bar_height)
-            pygame.draw.rect(screen, Colors.DARK_GRAY, bar_rect, border_radius=2)
-
-            # Gevuld gedeelte
-            fill_width = int((stat_value / 10) * bar_width)
-            fill_rect = pygame.Rect(bar_rect.left, bar_rect.top, fill_width, bar_height)
-            pygame.draw.rect(screen, self.color, fill_rect, border_radius=2)
-
-            stat_y += 18
+        for symbol, rect in (("-", self.minus_rect), ("+", self.plus_rect)):
+            pygame.draw.rect(screen, (72, 78, 92), rect, border_radius=10)
+            pygame.draw.rect(screen, Colors.WHITE, rect, 2, border_radius=10)
+            surface = self.font.render(symbol, True, Colors.WHITE)
+            screen.blit(surface, surface.get_rect(center=rect.center))
 
 
 class CharacterSelect:
-    # Het character-selectiescherm.
 
     def __init__(self, screen):
         self.screen = screen
-        self.selected_index = 0
-        self.confirmed = False
-        self.selected_character = None
+        self.title_font = pygame.font.Font(None, 64)
+        self.font = pygame.font.Font(None, 34)
+        self.small_font = pygame.font.Font(None, 24)
+        self.controls = []
+        self._create_controls()
+        self.reset()
 
-        self.title_font = pygame.font.Font(None, 56)
-        self.font = pygame.font.Font(None, 32)
-        self.small_font = pygame.font.Font(None, 22)
-
-        self._create_characters()
-
-    def _create_characters(self):
-        # Maak de drie character-opties aan.
-        spacing = SCREEN_WIDTH // 4
-        y = SCREEN_HEIGHT // 2
-
-        self.characters = [
-            CharacterOption(
-                name="Warrior",
-                description="Balanced fighter",
-                color=(220, 80, 80),
-                stats={"speed": 5, "power": 7, "defense": 6},
-                x=spacing, y=y
-            ),
-            CharacterOption(
-                name="Mage",
-                description="Ranged spellcaster",
-                color=(80, 120, 220),
-                stats={"speed": 6, "power": 8, "defense": 3},
-                x=spacing * 2, y=y
-            ),
-            CharacterOption(
-                name="Ninja",
-                description="Fast & agile",
-                color=(80, 200, 120),
-                stats={"speed": 9, "power": 5, "defense": 4},
-                x=spacing * 3, y=y
-            ),
+    def _create_controls(self):
+        start_x = 280
+        start_y = 190
+        spacing = 78
+        self.controls = [
+            StatControl(stat_name, start_x, start_y + (index * spacing))
+            for index, stat_name in enumerate(BUILD_STAT_NAMES)
         ]
 
-        self.characters[0].selected = True
+    def reset(self):
+        self.local_stats = {stat_name: 0 for stat_name in BUILD_STAT_NAMES}
+        self.points_left = STAT_POINT_BUDGET
+        self.confirmed = False
+        self.lock_requested = False
+        self.changed = False
+
+    def sync(self, stats, locked, budget):
+        self.local_stats = dict(stats)
+        self.points_left = max(0, budget - sum(self.local_stats.values()))
+        self.confirmed = locked
 
     def handle_event(self, event):
-        # Verwerk navigatie en bevestiging.
         if self.confirmed:
             return
 
-        if event.type == pygame.MOUSEMOTION:
-            for char in self.characters:
-                char.hovered = char.rect.collidepoint(event.pos)
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+            self.lock_requested = True
+            return
 
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                for i, char in enumerate(self.characters):
-                    if char.rect.collidepoint(event.pos):
-                        self._select(i)
-                        break
+        for control in self.controls:
+            delta = control.handle_event(event)
+            if delta is None:
+                continue
 
-        elif event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_LEFT, pygame.K_a):
-                self._select((self.selected_index - 1) % len(self.characters))
-            elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                self._select((self.selected_index + 1) % len(self.characters))
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                self._confirm()
+            stat_name = control.stat_name
+            current = self.local_stats[stat_name]
 
-    def _select(self, index):
-        # Selecteer een character op basis van index.
-        for char in self.characters:
-            char.selected = False
-        self.selected_index = index
-        self.characters[index].selected = True
+            if delta > 0 and self.points_left > 0:
+                self.local_stats[stat_name] = current + 1
+                self.points_left -= 1
+                self.changed = True
+            elif delta < 0 and current > 0:
+                self.local_stats[stat_name] = current - 1
+                self.points_left += 1
+                self.changed = True
+            break
 
-    def _confirm(self):
-        # Bevestig de keuze.
-        self.confirmed = True
-        self.selected_character = self.characters[self.selected_index].name
+    def consume_pending_stats(self):
+        if not self.changed:
+            return None
+        self.changed = False
+        return dict(self.local_stats)
 
-    def get_selected(self):
-        # Geeft de naam van het gekozen character terug als bevestigd, anders None.
-        return self.selected_character if self.confirmed else None
+    def consume_lock_request(self):
+        if not self.lock_requested:
+            return False
+        self.lock_requested = False
+        return True
 
-    def reset(self):
-        # Reset de selectie voor een nieuwe ronde.
-        self.confirmed = False
-        self.selected_character = None
-
-    def draw(self):
-        # Teken het character-selectiescherm.
+    def draw(self, remaining_seconds, player_count, locked_count):
         self.screen.fill(Colors.BG_COLOR)
 
-        title = self.title_font.render("SELECT YOUR FIGHTER", True, Colors.WHITE)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 80)))
+        title = self.title_font.render("BUILD YOUR FIGHTER", True, Colors.WHITE)
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 74)))
 
-        for char in self.characters:
-            char.draw(self.screen, self.font, self.small_font)
+        timer_text = self.font.render(f"{remaining_seconds}s", True, Colors.ORANGE)
+        self.screen.blit(timer_text, timer_text.get_rect(center=(SCREEN_WIDTH // 2, 126)))
 
-        if not self.confirmed:
-            hint = "← → to select | ENTER to confirm"
-        else:
-            hint = f"Selected: {self.selected_character} | Waiting for other players..."
+        points_text = self.font.render(f"Points left: {self.points_left}", True, Colors.WHITE)
+        self.screen.blit(points_text, points_text.get_rect(center=(SCREEN_WIDTH // 2, 154)))
 
-        hint_surface = self.font.render(hint, True, Colors.GRAY)
-        self.screen.blit(hint_surface, hint_surface.get_rect(
-            center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 60)))
+        for control in self.controls:
+            control.draw(self.screen, self.local_stats[control.stat_name], STAT_POINT_BUDGET)
+
+        footer = f"Locked players: {locked_count}/{player_count} | ENTER to confirm"
+        if self.confirmed:
+            footer = f"Build locked | Locked players: {locked_count}/{player_count}"
+
+        footer_surface = self.small_font.render(footer, True, Colors.LIGHT_GRAY)
+        self.screen.blit(footer_surface, footer_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 44)))

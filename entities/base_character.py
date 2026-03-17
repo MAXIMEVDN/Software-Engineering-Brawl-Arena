@@ -70,6 +70,15 @@ class BaseCharacter:
         self.sprites = {}
         self.sprites_loaded = False
 
+        # Build-stats voor de pre-game verdeling.
+        self.build_stats = {
+            "power": 0,
+            "defense": 0,
+            "mobility": 0,
+            "knockback": 0,
+            "range": 0,
+        }
+
     def light_attack(self):
         # Geeft een Attack-object terug voor de lichte aanval.
         raise NotImplementedError("Subclass moet light_attack() implementeren")
@@ -85,6 +94,91 @@ class BaseCharacter:
     def get_character_name(self):
         # Geeft de naam van dit character terug (bijv. "Warrior").
         raise NotImplementedError("Subclass moet get_character_name() implementeren")
+
+    def set_build_stats(self, stats):
+        # Sla build-stats op zodat beweging en aanvallen er direct mee kunnen schalen.
+        for stat_name in self.build_stats:
+            self.build_stats[stat_name] = max(0, int(stats.get(stat_name, self.build_stats[stat_name])))
+        self._apply_build_modifiers()
+
+    def _apply_build_modifiers(self):
+        # Vertaal build-stats naar movement- en combatmodifiers.
+        mobility = self.build_stats["mobility"]
+        self.walk_speed = CharacterStats.WALK_SPEED + (0.45 * mobility)
+        self.run_speed = CharacterStats.RUN_SPEED + (0.7 * mobility)
+        self.jump_power = CharacterStats.JUMP_POWER - (0.5 * mobility)
+        self.double_jump_power = CharacterStats.DOUBLE_JUMP_POWER - (0.4 * mobility)
+        self.dash_speed = CharacterStats.DASH_SPEED + (0.9 * mobility)
+        self.dash_duration = CharacterStats.DASH_DURATION + (mobility // 3)
+        self.dash_cooldown = max(10, CharacterStats.DASH_COOLDOWN - (2 * mobility))
+        self.max_jumps = 3 if mobility >= 6 else CharacterStats.MAX_JUMPS
+        self.jumps_remaining = min(self.jumps_remaining, self.max_jumps)
+
+    def _scale_damage(self, damage):
+        power_points = self.build_stats["power"]
+        return damage + (0.8 * power_points)
+
+    def _scale_knockback(self, knockback_base, knockback_scaling):
+        # Knockback-punten versterken zowel basis- als scaling-knockback.
+        knockback_points = self.build_stats["knockback"]
+        base_bonus = 0.6 * knockback_points
+        scaling_bonus = 0.015 * knockback_points
+        return knockback_base + base_bonus, knockback_scaling + scaling_bonus
+
+    def _scale_attack_range(self, hitbox_width, hitbox_height, hitbox_offset_x, hitbox_offset_y):
+        # Range vergroot vooral het effectieve bereik van de hitbox.
+        range_points = self.build_stats["range"]
+        range_factor = 1.0 + (0.08 * range_points)
+
+        scaled_width = max(1, int(round(hitbox_width * range_factor)))
+        scaled_height = max(1, int(round(hitbox_height * (1.0 + 0.04 * range_points))))
+        scaled_offset_x = int(round(hitbox_offset_x * range_factor))
+        scaled_offset_y = int(round(hitbox_offset_y))
+        return scaled_width, scaled_height, scaled_offset_x, scaled_offset_y
+
+    def _create_attack(
+        self,
+        name,
+        damage,
+        knockback_base,
+        knockback_scaling,
+        knockback_angle,
+        startup_frames,
+        active_frames,
+        recovery_frames,
+        hitbox_width,
+        hitbox_height,
+        hitbox_offset_x=0,
+        hitbox_offset_y=0,
+    ):
+        # Bouw een aanval op basis van de huidige build-stats.
+        scaled_knockback_base, scaled_knockback_scaling = self._scale_knockback(
+            knockback_base,
+            knockback_scaling,
+        )
+        scaled_width, scaled_height, scaled_offset_x, scaled_offset_y = self._scale_attack_range(
+            hitbox_width,
+            hitbox_height,
+            hitbox_offset_x,
+            hitbox_offset_y,
+        )
+
+        attack = Attack(
+            name=name,
+            damage=self._scale_damage(damage),
+            knockback_base=scaled_knockback_base,
+            knockback_scaling=scaled_knockback_scaling,
+            knockback_angle=knockback_angle,
+            startup_frames=startup_frames,
+            active_frames=active_frames,
+            recovery_frames=recovery_frames,
+            hitbox_width=scaled_width,
+            hitbox_height=scaled_height,
+            hitbox_offset_x=scaled_offset_x,
+            hitbox_offset_y=scaled_offset_y,
+        )
+        attack.owner_id = self.player_id
+        return attack
 
     def update(self, platforms, dt=1.0):
         # Update alles voor één frame: timers, physics, collision, aanval, animatie.
@@ -317,7 +411,9 @@ class BaseCharacter:
         self.damage_percent += damage
 
         # Knockback-formule: hoe meer schade, hoe verder weggeslagen
-        knockback = knockback_base + (self.damage_percent * knockback_scaling)
+        defense_points = self.build_stats["defense"]
+        defense_multiplier = max(0.55, 1.0 - (0.06 * defense_points))
+        knockback = (knockback_base + (self.damage_percent * knockback_scaling)) * defense_multiplier
 
         angle_rad = math.radians(angle)
         direction = -1 if attacker_x > self.x else 1
@@ -422,6 +518,7 @@ class BaseCharacter:
             "attack_cooldown": self.attack_cooldown,
             "attack_frame": self.attack_frame,
             "character_type": self.get_character_name(),
+            "build_stats": dict(self.build_stats),
             "active_attack": self.active_attack.to_dict() if self.active_attack else None,
         }
 
@@ -444,6 +541,7 @@ class BaseCharacter:
         self.jumps_remaining = state.get("jumps_remaining", self.max_jumps)
         self.attack_cooldown = state.get("attack_cooldown", 0)
         self.attack_frame = state.get("attack_frame", 0)
+        self.set_build_stats(state.get("build_stats", {}))
 
         attack_state = state.get("active_attack")
         self.active_attack = Attack.from_dict(attack_state) if attack_state else None

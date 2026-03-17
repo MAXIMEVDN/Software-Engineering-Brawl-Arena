@@ -7,7 +7,6 @@
 #   Special - Spinning Slash (grote hitbox, diagonaal omhoog)
 
 from entities.base_character import BaseCharacter
-from entities.attack import Attack
 from config import AttackData
 
 
@@ -27,7 +26,7 @@ class Warrior(BaseCharacter):
 
     def light_attack(self):
         # Snelle punch: weinig schade, snel herstel, goed als combo-starter.
-        attack = Attack(
+        return self._create_attack(
             name="Quick Punch",
             damage=AttackData.LIGHT["damage"],
             knockback_base=AttackData.LIGHT["knockback_base"],
@@ -41,12 +40,10 @@ class Warrior(BaseCharacter):
             hitbox_offset_x=5,
             hitbox_offset_y=15,
         )
-        attack.owner_id = self.player_id
-        return attack
 
     def heavy_attack(self):
         # Krachtige kick: veel schade en knockback, maar traag.
-        attack = Attack(
+        return self._create_attack(
             name="Power Kick",
             damage=AttackData.HEAVY["damage"],
             knockback_base=AttackData.HEAVY["knockback_base"] + 2,  # Extra knockback
@@ -60,12 +57,10 @@ class Warrior(BaseCharacter):
             hitbox_offset_x=10,
             hitbox_offset_y=20,
         )
-        attack.owner_id = self.player_id
-        return attack
 
     def special_attack(self):
         # Spinning Slash: grote hitbox, raakt aan beide kanten, schiet omhoog.
-        attack = Attack(
+        return self._create_attack(
             name="Spinning Slash",
             damage=AttackData.SPECIAL["damage"] + 2,
             knockback_base=AttackData.SPECIAL["knockback_base"],
@@ -79,5 +74,3 @@ class Warrior(BaseCharacter):
             hitbox_offset_x=-10,  # Gecentreerd rondom de character
             hitbox_offset_y=0,
         )
-        attack.owner_id = self.player_id
-        return attack

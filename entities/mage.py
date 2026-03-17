@@ -7,7 +7,6 @@
 #   Special - Arcane Blast (groot explosie-gebied, langzame charge)
 
 from entities.base_character import BaseCharacter
-from entities.attack import Attack, Projectile
 from config import AttackData
 
 
@@ -28,7 +27,7 @@ class Mage(BaseCharacter):
 
     def light_attack(self):
         # Magic Bolt: ranged aanval, hitbox op afstand van de character.
-        attack = Attack(
+        return self._create_attack(
             name="Magic Bolt",
             damage=AttackData.LIGHT["damage"] - 1,
             knockback_base=AttackData.LIGHT["knockback_base"],
@@ -42,12 +41,10 @@ class Mage(BaseCharacter):
             hitbox_offset_x=40,  # Ver voor de character
             hitbox_offset_y=20,
         )
-        attack.owner_id = self.player_id
-        return attack
 
     def heavy_attack(self):
         # Staff Swing: melee met de staff, langere hitbox maar minder schade.
-        attack = Attack(
+        return self._create_attack(
             name="Staff Swing",
             damage=AttackData.HEAVY["damage"] - 3,
             knockback_base=AttackData.HEAVY["knockback_base"],
@@ -61,12 +58,10 @@ class Mage(BaseCharacter):
             hitbox_offset_x=0,
             hitbox_offset_y=20,
         )
-        attack.owner_id = self.player_id
-        return attack
 
     def special_attack(self):
         # Arcane Blast: grote explosie, veel schade en knockback, maar traag.
-        attack = Attack(
+        return self._create_attack(
             name="Arcane Blast",
             damage=AttackData.SPECIAL["damage"] + 5,
             knockback_base=AttackData.SPECIAL["knockback_base"] + 3,
@@ -80,5 +75,3 @@ class Mage(BaseCharacter):
             hitbox_offset_x=20,
             hitbox_offset_y=-10,
         )
-        attack.owner_id = self.player_id
-        return attack

@@ -2,6 +2,8 @@
 
 SERVER_IP = "172.20.208.1"
 SERVER_PORT = 5555
+DISCOVERY_PORT = 5556
+DISCOVERY_TOKEN = "BRAWL_ARENA_DISCOVERY_V1"
 MAX_PLAYERS = 4
 
 SCREEN_WIDTH = 1280
@@ -227,6 +229,12 @@ class EffectSettings:
 NETWORK_TICK_RATE = 60  # Updates per second
 BUFFER_SIZE = 4096
 CONNECTION_TIMEOUT = 5.0  # seconds
+DISCOVERY_TIMEOUT = 1.0  # seconds
+STAT_SELECT_SECONDS = 30
+STAT_POINT_BUDGET = 10
+
+BUILD_STAT_NAMES = ["power", "defense", "mobility", "knockback", "range"]
+DEFAULT_BUILD_STATS = {name: 0 for name in BUILD_STAT_NAMES}
 
 import pygame
 

@@ -1,33 +1,31 @@
 """
-Game Server - Centrale multiplayer server.
-
-Dit script draait de game server die meerdere clients
-kan accepteren en de game state synchroniseert.
-
-Usage:
-    python server.py
-    
-De server print het IP-adres dat clients moeten gebruiken.
+Game Server - Centrale multiplayer server met LAN discovery en wachtwoordlobby.
 """
 
-import socket
-from _thread import start_new_thread
 import pickle
+import socket
 import sys
-from typing import Dict, Any
-from threading import Lock
-from dataclasses import dataclass
 import threading
 import time
+from _thread import start_new_thread
+from dataclasses import dataclass
+from threading import Lock
+from typing import Any, Dict
 
+from config import (
+    BUFFER_SIZE,
+    DISCOVERY_PORT,
+    DISCOVERY_TOKEN,
+    FPS,
+    MAX_PLAYERS,
+    SERVER_PORT,
+)
 from game_state import GameState
-from config import SERVER_PORT, BUFFER_SIZE, MAX_PLAYERS, FPS
 from systems.collision import CollisionSystem
 
 
 @dataclass
 class PlayerInputState:
-    """Laatst bekende input van een speler."""
     left: bool = False
     right: bool = False
     jump: bool = False
@@ -35,9 +33,8 @@ class PlayerInputState:
     light_attack: bool = False
     heavy_attack: bool = False
     special_attack: bool = False
-    
+
     def update_from_payload(self, payload: Dict[str, Any]) -> None:
-        """Werk held inputs bij en latch one-shot actions tot de volgende tick."""
         self.left = bool(payload.get("left", False))
         self.right = bool(payload.get("right", False))
         self.jump = self.jump or bool(payload.get("jump", False))
@@ -45,9 +42,8 @@ class PlayerInputState:
         self.light_attack = self.light_attack or bool(payload.get("light_attack", False))
         self.heavy_attack = self.heavy_attack or bool(payload.get("heavy_attack", False))
         self.special_attack = self.special_attack or bool(payload.get("special_attack", False))
-    
+
     def consume_for_tick(self) -> Dict[str, bool]:
-        """Geef huidige input voor een frame terug en clear one-shot actions."""
         current = {
             "left": self.left,
             "right": self.right,
@@ -66,290 +62,259 @@ class PlayerInputState:
 
 
 class GameServer:
-    """
-    Multiplayer game server.
-    
-    Accepteert client verbindingen en synchroniseert
-    de game state tussen alle spelers.
-    
-    Attributes:
-        socket: Server socket
-        game_state: De gedeelde game state
-        player_count: Aantal verbonden spelers
-        connections: Dictionary van player_id -> connection
-    """
-    
-    def __init__(self, ip: str = "", port: int = SERVER_PORT):
-        """
-        Initialiseer de server.
-        
-        Args:
-            ip: IP om op te luisteren ("" voor alle interfaces)
-            port: Port nummer
-        """
+
+    def __init__(self, password: str, ip: str = "", port: int = SERVER_PORT):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        
+
         self.ip = ip
         self.port = port
+        self.password = password
         self.game_state = GameState()
-        self.player_count = 0
         self.connections: Dict[int, socket.socket] = {}
+        self.input_states: Dict[int, PlayerInputState] = {}
         self.state_lock = Lock()
         self.collision = CollisionSystem()
-        self.input_states: Dict[int, PlayerInputState] = {}
         self.running = True
         self.tick_interval = 1.0 / FPS
-        
+
         try:
             self.socket.bind((ip, port))
-        except socket.error as e:
-            print(f"Kon niet binden aan port {port}: {e}")
+        except socket.error as exc:
+            print(f"Kon niet binden aan port {port}: {exc}")
             sys.exit(1)
-        
+
         self.socket.listen(MAX_PLAYERS)
+        self.discovery_thread = threading.Thread(target=self._discovery_loop, daemon=True)
+        self.game_thread = threading.Thread(target=self._game_loop, daemon=True)
+
         print(f"Server gestart op port {port}")
-        print(f"Wacht op verbindingen...")
-        print(f"\n{'='*50}")
-        print(f"Deel dit IP-adres met andere spelers:")
-        print(f"  {self._get_local_ip()}")
-        print(f"{'='*50}\n")
-    
+        print(f"Lobby beschikbaar op LAN met wachtwoord: {self.password}")
+
     def _get_local_ip(self) -> str:
-        """
-        Haal het lokale IP-adres op.
-        
-        Returns:
-            Lokaal IP-adres als string
-        """
         try:
-            # Maak een dummy verbinding om lokaal IP te vinden
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect(("8.8.8.8", 80))
+            ip = sock.getsockname()[0]
+            sock.close()
             return ip
-        except:
-            return "localhost"
-    
+        except OSError:
+            return "127.0.0.1"
+
+    def _can_advertise_lobby(self) -> bool:
+        return self.running and self.game_state.phase == "lobby" and self.game_state.active_player_count() < MAX_PLAYERS
+
+    def _discovery_loop(self) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("", DISCOVERY_PORT))
+
+        while self.running:
+            try:
+                payload, addr = sock.recvfrom(BUFFER_SIZE)
+                request = pickle.loads(payload)
+            except Exception:
+                continue
+
+            if request.get("token") != DISCOVERY_TOKEN or request.get("type") != "discover_lobbies":
+                continue
+
+            if not self._can_advertise_lobby():
+                continue
+
+            response = {
+                "token": DISCOVERY_TOKEN,
+                "lobby": {
+                    "ip": self._get_local_ip(),
+                    "player_count": self.game_state.active_player_count(),
+                    "max_players": MAX_PLAYERS,
+                    "phase": self.game_state.phase,
+                    "requires_password": True,
+                },
+            }
+            try:
+                sock.sendto(pickle.dumps(response), addr)
+            except OSError:
+                continue
+
+        sock.close()
+
     def start(self) -> None:
-        """Start de server en accepteer verbindingen."""
-        print("Server luistert naar verbindingen...")
-        threading.Thread(target=self._game_loop, daemon=True).start()
-        
-        while True:
+        self.discovery_thread.start()
+        self.game_thread.start()
+
+        while self.running:
             try:
                 conn, addr = self.socket.accept()
-                print(f"\nNieuwe verbinding van {addr}")
-                
-                # Wijs player ID toe
-                player_id = self.player_count
-                self.player_count += 1
-                self.connections[player_id] = conn
-                
-                # Voeg speler toe aan game state
-                if self.game_state.add_player(player_id):
-                    print(f"Speler {player_id} toegevoegd aan game")
-                else:
-                    print(f"Kon speler {player_id} niet toevoegen (vol?)")
-                self.input_states[player_id] = PlayerInputState()
-                
-                # Stuur player ID naar client
-                conn.sendall(pickle.dumps(player_id))
-                
-                # Start thread voor deze client
+                print(f"Nieuwe verbinding van {addr}")
+                player_id = self._perform_handshake(conn)
+                if player_id is None:
+                    conn.close()
+                    continue
+                print(f"Speler {player_id} toegelaten tot lobby")
                 start_new_thread(self._handle_client, (conn, player_id))
-                
-            except socket.error as e:
-                print(f"Socket error: {e}")
+            except socket.error as exc:
+                if self.running:
+                    print(f"Socket error: {exc}")
                 break
             except KeyboardInterrupt:
-                print("\nServer gestopt")
                 break
-        
+
         self.shutdown()
-    
+
+    def _perform_handshake(self, conn: socket.socket):
+        try:
+            data = conn.recv(BUFFER_SIZE)
+            message = pickle.loads(data)
+            if message.get("type") != "join_lobby":
+                conn.sendall(pickle.dumps({"ok": False, "error": "Ongeldige lobby handshake"}))
+                return None
+
+            provided_password = str(message.get("data", {}).get("password", ""))
+            if provided_password != self.password:
+                conn.sendall(pickle.dumps({"ok": False, "error": "Wachtwoord klopt niet"}))
+                return None
+
+            with self.state_lock:
+                if self.game_state.phase != "lobby":
+                    conn.sendall(pickle.dumps({"ok": False, "error": "Lobby accepteert geen nieuwe spelers"}))
+                    return None
+
+                player_id = self.game_state.add_player()
+                if player_id is None:
+                    conn.sendall(pickle.dumps({"ok": False, "error": "Lobby zit vol"}))
+                    return None
+
+                if self.game_state.active_player_count() >= 2:
+                    self.game_state.start_stat_selection()
+
+                self.connections[player_id] = conn
+                self.input_states[player_id] = PlayerInputState()
+
+                conn.sendall(pickle.dumps({
+                    "ok": True,
+                    "player_id": player_id,
+                    "game_state": self.game_state.to_dict(),
+                }))
+
+            return player_id
+        except Exception as exc:
+            print(f"Handshake mislukt: {exc}")
+            return None
+
     def _handle_client(self, conn: socket.socket, player_id: int) -> None:
-        """
-        Handle communicatie met een client.
-        
-        Args:
-            conn: Socket verbinding
-            player_id: ID van deze speler
-        """
-        print(f"Thread gestart voor speler {player_id}")
-        
-        while True:
+        while self.running:
             try:
-                # Ontvang data van client
                 data = conn.recv(BUFFER_SIZE)
-                
                 if not data:
-                    print(f"Speler {player_id} heeft verbinding verbroken")
                     break
-                
-                # Verwerk het bericht
+
                 message = pickle.loads(data)
                 response = self._process_message(player_id, message)
-                
-                # Stuur response terug
                 conn.sendall(pickle.dumps(response))
-                
-            except socket.error as e:
-                print(f"Socket error voor speler {player_id}: {e}")
+            except socket.error:
                 break
-            except Exception as e:
-                print(f"Error voor speler {player_id}: {e}")
+            except Exception as exc:
+                print(f"Error voor speler {player_id}: {exc}")
                 break
-        
-        # Cleanup
-        print(f"Speler {player_id} verwijderen...")
+
         with self.state_lock:
             self.game_state.remove_player(player_id)
-            if player_id in self.connections:
-                del self.connections[player_id]
-            if player_id in self.input_states:
-                del self.input_states[player_id]
-        conn.close()
-    
+            self.connections.pop(player_id, None)
+            self.input_states.pop(player_id, None)
+            if self.game_state.active_player_count() < 2 and self.game_state.phase == "stat_select":
+                self.game_state.phase = "lobby"
+                self.game_state.stat_select_remaining_frames = 0
+
+        try:
+            conn.close()
+        except OSError:
+            pass
+
     def _process_message(self, player_id: int, message: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Verwerk een bericht van een client.
-        
-        Args:
-            player_id: ID van afzender
-            message: Het bericht
-            
-        Returns:
-            Response dictionary
-        """
         msg_type = message.get("type", "")
         data = message.get("data", {})
-        
+
         with self.state_lock:
             if msg_type == "input":
-                # Bewaar laatste input van client; de game loop verwerkt dit.
                 self._handle_player_input(player_id, data)
-                
-            elif msg_type == "char_select":
-                # Character selectie
-                char_type = data.get("character_type", "Warrior")
-                self.game_state.select_character(player_id, char_type)
-                
-            elif msg_type == "ready":
-                # Player ready toggle
-                ready = data.get("ready", True)
-                self.game_state.set_player_ready(player_id, ready)
-                
-                # Check of game kan starten
-                if self.game_state.all_players_ready():
-                    self.game_state.start_game()
-                    print("Game gestart!")
-
-            elif msg_type == "restart_game":
-                self.game_state.start_game()
-                    
             elif msg_type == "get_state":
-                # Client vraagt huidige state op
                 pass
-            
+            elif msg_type == "set_stats":
+                self.game_state.select_stats(player_id, data.get("stats", {}))
+            elif msg_type == "lock_stats":
+                self.game_state.lock_stats(player_id)
+
             return {
                 "type": "state",
                 "game_state": self.game_state.to_dict(),
             }
-    
+
     def _handle_player_input(self, player_id: int, input_data: Dict[str, Any]) -> None:
-        """
-        Verwerk input van een speler.
-        
-        Args:
-            player_id: Speler ID
-            input_data: Input data (keys, actions)
-        """
         payload = input_data.get("input_state", {})
         player_input = self.input_states.setdefault(player_id, PlayerInputState())
         player_input.update_from_payload(payload)
-    
+
     def _game_loop(self) -> None:
-        """Draai de game simulation op een vaste tick rate."""
         while self.running:
             frame_start = time.perf_counter()
-            
+
             with self.state_lock:
                 if self.game_state.phase == "playing":
                     self._tick_game()
-            
+                else:
+                    self.game_state.update()
+
             elapsed = time.perf_counter() - frame_start
             sleep_time = self.tick_interval - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
-    
+
     def _tick_game(self) -> None:
-        """Voer één server-authoritative game tick uit."""
         for player_id, player in self.game_state.players.items():
             if not player.connected or not player.character:
                 continue
-            
             input_state = self.input_states.setdefault(player_id, PlayerInputState())
             player.character.apply_input_state(input_state.consume_for_tick())
-        
+
         characters = self.game_state.get_characters()
         for character in characters:
             character.update(self.game_state.platforms)
-        
+
         self.collision.update(characters)
         self.game_state.update()
-    
-    def broadcast(self, message: Dict[str, Any], exclude: int = None) -> None:
-        """
-        Stuur bericht naar alle verbonden clients.
-        
-        Args:
-            message: Bericht om te sturen
-            exclude: Player ID om uit te sluiten (optioneel)
-        """
-        data = pickle.dumps(message)
-        
-        for player_id, conn in list(self.connections.items()):
-            if player_id == exclude:
-                continue
-            try:
-                conn.sendall(data)
-            except socket.error:
-                print(f"Kon niet naar speler {player_id} sturen")
-    
+
     def shutdown(self) -> None:
-        """Sluit de server netjes af."""
-        print("Server afsluiten...")
         self.running = False
-        
-        for conn in self.connections.values():
+        for conn in list(self.connections.values()):
             try:
                 conn.close()
-            except:
+            except OSError:
                 pass
-        
-        self.socket.close()
-        print("Server afgesloten")
-
-
-def main():
-    """Start de game server."""
-    print("="*50)
-    print("  BRAWL ARENA - Game Server")
-    print("="*50)
-    print()
-    
-    # Optioneel: custom port via command line
-    port = SERVER_PORT
-    if len(sys.argv) > 1:
         try:
-            port = int(sys.argv[1])
-        except ValueError:
-            print(f"Ongeldige port: {sys.argv[1]}")
-            sys.exit(1)
-    
-    server = GameServer(port=port)
+            self.socket.close()
+        except OSError:
+            pass
+
+
+def main() -> None:
+    password = "arena"
+    port = SERVER_PORT
+
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--password" and i + 1 < len(args):
+            password = args[i + 1]
+            i += 2
+        elif arg == "--port" and i + 1 < len(args):
+            port = int(args[i + 1])
+            i += 2
+        else:
+            i += 1
+
+    server = GameServer(password=password, port=port)
     server.start()
 
 
