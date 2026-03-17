@@ -615,6 +615,8 @@ class BaseCharacter:
             "stocks": self.stocks,
             "facing_right": self.facing_right,
             "state": self.state,
+            "animation_frame": self.animation_frame,
+            "animation_timer": self.animation_timer,
             "on_ground": self.on_ground,
             "hitstun": self.hitstun,
             "invincible": self.invincible,
@@ -640,6 +642,9 @@ class BaseCharacter:
         self.stocks = state["stocks"]
         self.facing_right = state["facing_right"]
         self.state = state["state"]
+        self.animation_frame = state.get("animation_frame", 0)
+        self.animation_timer = state.get("animation_timer", 0)
+        self._prev_state = self.state
         self.on_ground = state["on_ground"]
         self.hitstun = state["hitstun"]
         self.invincible = state["invincible"]
