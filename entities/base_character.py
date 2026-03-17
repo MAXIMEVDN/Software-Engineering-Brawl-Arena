@@ -17,18 +17,20 @@ from entities.attack import Attack
 _SPRITE_RENDER_SIZE = 192  # Pixels to render each sprite frame (square)
 _shared_sprites = None    # Raw scaled frames, loaded once and shared
 
-# Tint colors per player — bright enough for BLEND_MULT to produce a visible hue
+# Tint colors per player — saturated so BLEND_MULT produces vivid hues
 _PLAYER_TINT_COLORS = [
-    (255, 150, 150),  # P1 - red
-    (150, 150, 255),  # P2 - blue
-    (150, 255, 150),  # P3 - green
-    (255, 255, 140),  # P4 - yellow
+    (255, 55, 55),   # P1 - vivid red
+    (55, 55, 255),   # P2 - vivid blue
+    (55, 210, 55),   # P3 - vivid green
+    (255, 215, 30),  # P4 - vivid yellow
 ]
 
 
 def _apply_tint(surface, tint_color):
     tinted = surface.copy()
+    # BLEND_MULT colorises but darkens; BLEND_ADD recovers brightness
     tinted.fill(tint_color, special_flags=pygame.BLEND_MULT)
+    tinted.fill((55, 55, 55), special_flags=pygame.BLEND_ADD)
     return tinted
 
 
