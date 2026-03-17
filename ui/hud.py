@@ -8,22 +8,22 @@
 import pygame
 
 from config import Colors, SCREEN_HEIGHT, SCREEN_WIDTH, FPS
-from ui.title_text import draw_title_style_text
+from ui.title_text import draw_title_style_text, get_ui_font, render_fit_text
 
 
 class HUD:
 
     def __init__(self, screen):
         self.screen = screen
-        self.font_large = pygame.font.Font(None, 48)
-        self.font_medium = pygame.font.Font(None, 32)
-        self.font_small = pygame.font.Font(None, 24)
+        self.font_large = get_ui_font(30)
+        self.font_medium = get_ui_font(18)
+        self.font_small = get_ui_font(14)
 
         self.hud_positions = [
-            (100, SCREEN_HEIGHT - 80),
-            (350, SCREEN_HEIGHT - 80),
-            (600, SCREEN_HEIGHT - 80),
-            (850, SCREEN_HEIGHT - 80),
+            (148, SCREEN_HEIGHT - 72),
+            (408, SCREEN_HEIGHT - 72),
+            (668, SCREEN_HEIGHT - 72),
+            (928, SCREEN_HEIGHT - 72),
         ]
 
     def draw(self, characters, local_player_id=0, game_state=None):
@@ -43,26 +43,26 @@ class HUD:
         x, y = pos
         color = character.color
 
-        box_rect = pygame.Rect(x - 90, y - 52, 180, 112)
+        box_rect = pygame.Rect(x - 92, y - 48, 184, 96)
         pygame.draw.rect(self.screen, (30, 30, 35), box_rect, border_radius=10)
 
-        border_width = 3 if is_local else 1
+        border_width = 3 if is_local else 2
         pygame.draw.rect(self.screen, color, box_rect, border_width, border_radius=10)
 
-        name_text = f"P{character.player_id + 1}: {character.get_character_name()}"
-        name_surface = self.font_small.render(name_text, True, Colors.WHITE)
-        self.screen.blit(name_surface, name_surface.get_rect(center=(x, y - 20)))
+        name_text = f"P{character.player_id + 1} {character.get_character_name()}"
+        name_surface = render_fit_text(name_text, Colors.WHITE, box_rect.width - 18, 16, 12)
+        self.screen.blit(name_surface, name_surface.get_rect(center=(x, y - 28)))
 
         damage_color = self._get_damage_color(character.damage_percent)
         damage_text = f"{int(character.damage_percent)}%"
         damage_surface = self.font_large.render(damage_text, True, damage_color)
-        self.screen.blit(damage_surface, damage_surface.get_rect(center=(x, y + 6)))
+        self.screen.blit(damage_surface, damage_surface.get_rect(center=(x, y - 6)))
 
         coins_text = f"Coins: {self._get_player_coins(character.player_id, game_state)}"
-        coins_surface = self.font_small.render(coins_text, True, Colors.YELLOW)
-        self.screen.blit(coins_surface, coins_surface.get_rect(center=(x, y + 34)))
+        coins_surface = render_fit_text(coins_text, Colors.YELLOW, box_rect.width - 18, 16, 12)
+        self.screen.blit(coins_surface, coins_surface.get_rect(center=(x, y + 20)))
 
-        self._draw_stocks(x, y + 56, character.stocks, color)
+        self._draw_stocks(x, y + 38, character.stocks, color)
 
     def _get_player_coins(self, player_id, game_state):
         if game_state is None:
@@ -79,13 +79,13 @@ class HUD:
             self.screen.blit(text, text.get_rect(center=(x, y)))
             return
 
-        spacing = 20
-        start_x = x - (stocks * spacing) // 2
+        spacing = 14
+        start_x = x - ((max(stocks, 1) - 1) * spacing) // 2
 
         for i in range(stocks):
-            stock_x = start_x + i * spacing + 10
-            pygame.draw.circle(self.screen, color, (stock_x, y), 6)
-            pygame.draw.circle(self.screen, Colors.WHITE, (stock_x, y), 6, 1)
+            stock_x = start_x + i * spacing
+            pygame.draw.circle(self.screen, color, (stock_x, y), 4)
+            pygame.draw.circle(self.screen, Colors.WHITE, (stock_x, y), 4, 1)
 
     def _draw_match_info(self, game_state):
         if game_state.is_final_round:
@@ -97,8 +97,8 @@ class HUD:
                 f" | Infinite lives | {seconds_left}s"
             )
 
-        surface = self.font_small.render(label, True, Colors.WHITE)
-        self.screen.blit(surface, (20, 20))
+        surface = render_fit_text(label, Colors.WHITE, 380, 18, 14)
+        self.screen.blit(surface, (18, 42))
 
     def _draw_round_end_countdown(self, game_state):
         if game_state.phase != "playing" or game_state.is_final_round:
@@ -124,9 +124,9 @@ class HUD:
         return (255, 50, 50)
 
     def _draw_controls_hint(self):
-        controls = "Controls: WASD/Arrows = Move | J = Light | K = Heavy | L = Special | Shift = Dash"
-        surface = self.font_small.render(controls, True, Colors.GRAY)
-        self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, 20)))
+        controls = "WASD/Arrows Move  J Light  K Heavy  L Special  Shift Dash"
+        surface = render_fit_text(controls, Colors.GRAY, SCREEN_WIDTH - 40, 18, 12)
+        self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, 18)))
 
     def draw_winner(self, winner_name, winner_color):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -148,23 +148,16 @@ class HUD:
 
     def draw_waiting(self, player_count, ready_count):
         text = f"Players: {player_count}/4 | Ready: {ready_count}/{player_count}"
-        surface = self.font_medium.render(text, True, Colors.WHITE)
+        surface = render_fit_text(text, Colors.WHITE, SCREEN_WIDTH - 40, 22, 14)
         self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, 50)))
 
         hint = self.font_small.render("Press R when ready to start", True, Colors.GRAY)
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 80)))
 
     def draw_center_announcement(self, text, size=96):
-        overlay_rect = pygame.Rect(0, 0, min(700, SCREEN_WIDTH - 80), 180)
-        overlay_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        panel = pygame.Surface(overlay_rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(panel, (8, 10, 16, 150), panel.get_rect(), border_radius=26)
-        pygame.draw.rect(panel, (247, 233, 214, 90), panel.get_rect(), 2, border_radius=26)
-        self.screen.blit(panel, overlay_rect.topleft)
-
         draw_title_style_text(
             self.screen,
             text,
-            overlay_rect.center,
+            (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2),
             size,
         )

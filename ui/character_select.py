@@ -1,6 +1,7 @@
 import pygame
 
 from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT, BUILD_STAT_NAMES, STAT_POINT_BUDGET
+from ui.title_text import get_ui_font, render_fit_text
 
 
 STAT_DISPLAY = {
@@ -14,15 +15,15 @@ STAT_DISPLAY = {
 
 class StatControl:
 
-    def __init__(self, stat_name, x, y, width=720, height=64):
+    def __init__(self, stat_name, x, y, width=970, height=82):
         self.stat_name = stat_name
         self.meta = STAT_DISPLAY[stat_name]
         self.rect = pygame.Rect(x, y, width, height)
-        self.minus_rect = pygame.Rect(x + width - 128, y + 12, 40, 40)
-        self.plus_rect = pygame.Rect(x + width - 56, y + 12, 40, 40)
-        self.bar_rect = pygame.Rect(x + 200, y + 23, 260, 18)
-        self.font = pygame.font.Font(None, 30)
-        self.small_font = pygame.font.Font(None, 22)
+        self.plus_rect = pygame.Rect(x + width - 150, y + 14, 54, 54)
+        self.minus_rect = pygame.Rect(x + width - 78, y + 14, 54, 54)
+        self.bar_rect = pygame.Rect(x + 380, y + 32, 370, 18)
+        self.font = get_ui_font(24)
+        self.small_font = get_ui_font(16)
 
     def handle_event(self, event):
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
@@ -33,26 +34,29 @@ class StatControl:
             return 1
         return None
 
-    def draw(self, screen, value, max_fill):
+    def draw(self, screen, value, max_fill, selected=False, selected_button="plus"):
         pygame.draw.rect(screen, (36, 40, 50), self.rect, border_radius=14)
-        pygame.draw.rect(screen, (86, 92, 110), self.rect, 2, border_radius=14)
+        border_color = Colors.ORANGE if selected else (86, 92, 110)
+        pygame.draw.rect(screen, border_color, self.rect, 3 if selected else 2, border_radius=14)
 
-        icon_rect = pygame.Rect(self.rect.left + 16, self.rect.top + 12, 40, 40)
+        icon_rect = pygame.Rect(self.rect.left + 20, self.rect.top + 16, 48, 48)
         pygame.draw.rect(screen, self.meta["color"], icon_rect, border_radius=10)
 
-        label = self.font.render(self.meta["label"], True, Colors.WHITE)
-        screen.blit(label, (self.rect.left + 72, self.rect.top + 10))
+        label = render_fit_text(self.meta["label"], Colors.WHITE, 240, 24, 16)
+        screen.blit(label, (self.rect.left + 98, self.rect.top + 14))
         value_text = self.small_font.render(f"{value} pts", True, Colors.LIGHT_GRAY)
-        screen.blit(value_text, (self.rect.left + 72, self.rect.top + 34))
+        screen.blit(value_text, (self.rect.left + 98, self.rect.top + 46))
 
         pygame.draw.rect(screen, Colors.DARK_GRAY, self.bar_rect, border_radius=9)
         fill_width = int(self.bar_rect.width * (value / max_fill)) if max_fill > 0 else 0
-        fill_rect = pygame.Rect(self.bar_rect.left, self.bar_rect.top, fill_width, self.bar_rect.height)
-        pygame.draw.rect(screen, self.meta["color"], fill_rect, border_radius=9)
+        if fill_width > 0:
+            fill_rect = pygame.Rect(self.bar_rect.left, self.bar_rect.top, fill_width, self.bar_rect.height)
+            pygame.draw.rect(screen, self.meta["color"], fill_rect, border_radius=9)
 
-        for symbol, rect in (("-", self.minus_rect), ("+", self.plus_rect)):
+        for symbol, rect, button_name in (("+", self.plus_rect, "plus"), ("-", self.minus_rect, "minus")):
             pygame.draw.rect(screen, (72, 78, 92), rect, border_radius=10)
-            pygame.draw.rect(screen, Colors.WHITE, rect, 2, border_radius=10)
+            outline = Colors.ORANGE if selected and selected_button == button_name else Colors.WHITE
+            pygame.draw.rect(screen, outline, rect, 3 if selected and selected_button == button_name else 2, border_radius=10)
             surface = self.font.render(symbol, True, Colors.WHITE)
             screen.blit(surface, surface.get_rect(center=rect.center))
 
@@ -61,17 +65,18 @@ class CharacterSelect:
 
     def __init__(self, screen):
         self.screen = screen
-        self.title_font = pygame.font.Font(None, 64)
-        self.font = pygame.font.Font(None, 34)
-        self.small_font = pygame.font.Font(None, 24)
+        self.title_font = get_ui_font(52)
+        self.font = get_ui_font(24)
+        self.small_font = get_ui_font(16)
+        self.ready_rect = pygame.Rect(SCREEN_WIDTH // 2 - 132, SCREEN_HEIGHT - 112, 264, 38)
         self.controls = []
         self._create_controls()
         self.reset()
 
     def _create_controls(self):
-        start_x = 280
-        start_y = 190
-        spacing = 78
+        start_x = 155
+        start_y = 150
+        spacing = 84
         self.controls = [
             StatControl(stat_name, start_x, start_y + (index * spacing))
             for index, stat_name in enumerate(BUILD_STAT_NAMES)
@@ -83,6 +88,9 @@ class CharacterSelect:
         self.confirmed = False
         self.lock_requested = False
         self.changed = False
+        self.selected_index = 0
+        self.selected_button = "plus"
+        self.selected_section = "stats"
 
     def sync(self, stats, locked, budget):
         self.local_stats = dict(stats)
@@ -93,27 +101,90 @@ class CharacterSelect:
         if self.confirmed:
             return
 
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+        if event.type == pygame.MOUSEMOTION:
+            self._sync_selection_from_mouse(event.pos)
+            return
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.ready_rect.collidepoint(event.pos):
+            self.selected_section = "ready"
             self.lock_requested = True
             return
+
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_w, pygame.K_UP):
+                if self.selected_section == "ready":
+                    self.selected_section = "stats"
+                    self.selected_index = len(self.controls) - 1
+                else:
+                    self.selected_index = (self.selected_index - 1) % len(self.controls)
+                return
+            if event.key in (pygame.K_s, pygame.K_DOWN):
+                if self.selected_section == "stats" and self.selected_index == len(self.controls) - 1:
+                    self.selected_section = "ready"
+                elif self.selected_section == "stats":
+                    self.selected_index = (self.selected_index + 1) % len(self.controls)
+                else:
+                    self.selected_section = "stats"
+                    self.selected_index = 0
+                return
+            if event.key in (pygame.K_a, pygame.K_LEFT):
+                if self.selected_section == "stats":
+                    self.selected_button = "plus"
+                return
+            if event.key in (pygame.K_d, pygame.K_RIGHT):
+                if self.selected_section == "stats":
+                    self.selected_button = "minus"
+                return
+            if event.key == pygame.K_RETURN:
+                if self.selected_section == "ready":
+                    self.lock_requested = True
+                else:
+                    delta = 1 if self.selected_button == "plus" else -1
+                    self._apply_delta(self.controls[self.selected_index].stat_name, delta)
+                return
 
         for control in self.controls:
             delta = control.handle_event(event)
             if delta is None:
                 continue
 
-            stat_name = control.stat_name
-            current = self.local_stats[stat_name]
-
-            if delta > 0 and self.points_left > 0:
-                self.local_stats[stat_name] = current + 1
-                self.points_left -= 1
-                self.changed = True
-            elif delta < 0 and current > 0:
-                self.local_stats[stat_name] = current - 1
-                self.points_left += 1
-                self.changed = True
+            self.selected_index = self.controls.index(control)
+            self.selected_section = "stats"
+            self.selected_button = "plus" if delta > 0 else "minus"
+            self._apply_delta(control.stat_name, delta)
             break
+
+    def _sync_selection_from_mouse(self, mouse_pos):
+        if self.ready_rect.collidepoint(mouse_pos):
+            self.selected_section = "ready"
+            return
+
+        for index, control in enumerate(self.controls):
+            if control.minus_rect.collidepoint(mouse_pos):
+                self.selected_section = "stats"
+                self.selected_index = index
+                self.selected_button = "minus"
+                return
+            if control.plus_rect.collidepoint(mouse_pos):
+                self.selected_section = "stats"
+                self.selected_index = index
+                self.selected_button = "plus"
+                return
+            if control.rect.collidepoint(mouse_pos):
+                self.selected_section = "stats"
+                self.selected_index = index
+                return
+
+    def _apply_delta(self, stat_name, delta):
+        current = self.local_stats[stat_name]
+        if delta > 0 and self.points_left > 0:
+            self.local_stats[stat_name] = current + 1
+            self.points_left -= 1
+            self.changed = True
+        elif delta < 0 and current > 0:
+            self.local_stats[stat_name] = current - 1
+            self.points_left += 1
+            self.changed = True
 
     def consume_pending_stats(self):
         if not self.changed:
@@ -131,20 +202,37 @@ class CharacterSelect:
         self.screen.fill(Colors.BG_COLOR)
 
         title = self.title_font.render("BUILD YOUR FIGHTER", True, Colors.WHITE)
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 74)))
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 56)))
 
         timer_text = self.font.render(f"{remaining_seconds}s", True, Colors.ORANGE)
-        self.screen.blit(timer_text, timer_text.get_rect(center=(SCREEN_WIDTH // 2, 126)))
+        self.screen.blit(timer_text, timer_text.get_rect(center=(SCREEN_WIDTH // 2, 102)))
 
         points_text = self.font.render(f"Points left: {self.points_left}", True, Colors.WHITE)
-        self.screen.blit(points_text, points_text.get_rect(center=(SCREEN_WIDTH // 2, 154)))
+        self.screen.blit(points_text, points_text.get_rect(center=(SCREEN_WIDTH // 2, 132)))
 
         for control in self.controls:
-            control.draw(self.screen, self.local_stats[control.stat_name], STAT_POINT_BUDGET)
+            control.draw(
+                self.screen,
+                self.local_stats[control.stat_name],
+                STAT_POINT_BUDGET,
+                selected=not self.confirmed and self.selected_section == "stats" and self.controls.index(control) == self.selected_index,
+                selected_button=self.selected_button,
+            )
 
-        footer = f"Locked players: {locked_count}/{player_count} | ENTER when ready"
+        ready_color = (74, 140, 98) if not self.confirmed else (56, 90, 66)
+        pygame.draw.rect(self.screen, ready_color, self.ready_rect, border_radius=12)
+        ready_outline = Colors.ORANGE if self.selected_section == "ready" and not self.confirmed else Colors.WHITE
+        pygame.draw.rect(self.screen, ready_outline, self.ready_rect, 3 if self.selected_section == "ready" and not self.confirmed else 2, border_radius=12)
+        ready_surface = self.small_font.render("READY", True, Colors.WHITE)
+        self.screen.blit(ready_surface, ready_surface.get_rect(center=self.ready_rect.center))
+
+        footer = f"Ready: {locked_count}/{player_count}"
+        hint = "W/S move | A/D choose minus-plus | Enter apply or ready"
         if self.confirmed:
-            footer = f"Build locked | Waiting for others: {locked_count}/{player_count}"
+            footer = f"Ready: {locked_count}/{player_count}"
+            hint = "Build locked, waiting for the others"
 
         footer_surface = self.small_font.render(footer, True, Colors.LIGHT_GRAY)
-        self.screen.blit(footer_surface, footer_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 44)))
+        self.screen.blit(footer_surface, footer_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50)))
+        hint_surface = self.small_font.render(hint, True, Colors.LIGHT_GRAY)
+        self.screen.blit(hint_surface, hint_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 28)))

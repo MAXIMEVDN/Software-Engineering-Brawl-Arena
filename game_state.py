@@ -25,6 +25,7 @@ from config import (
     MAX_MAP_COINS,
     MAP_COIN_VALUE,
     INTERMISSION_SECONDS,
+    ROUND_END_DURATION,
     PRELIMINARY_ROUND_DURATION,
     PRELIMINARY_ROUNDS,
     SPAWN_POSITIONS,
@@ -46,6 +47,7 @@ class PlayerData:
     coins: int = 0
     owned_attack_ids: List[str] = None
     equipped_attacks: Dict[str, Optional[str]] = None
+    round_stat_upgrades: Dict[str, int] = None
 
     def __post_init__(self):
         if self.build_stats is None:
@@ -58,6 +60,8 @@ class PlayerData:
                 "heavy": None,
                 "special": None,
             }
+        if self.round_stat_upgrades is None:
+            self.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
 
 class GameState:
@@ -76,6 +80,8 @@ class GameState:
         self.stat_select_remaining_frames: int = 0
         self.upgrade_shop_total_frames: int = INTERMISSION_SECONDS * FPS
         self.upgrade_shop_remaining_frames: int = 0
+        self.round_end_total_frames: int = ROUND_END_DURATION
+        self.round_end_remaining_frames: int = 0
         self.pending_round_transition: Optional[str] = None
         self.preliminary_rounds: int = PRELIMINARY_ROUNDS
         self.preliminary_round_duration: int = PRELIMINARY_ROUND_DURATION
@@ -117,6 +123,7 @@ class GameState:
                 "heavy": None,
                 "special": None,
             }
+            self.players[player_id].round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
             return player_id
 
         self.players[player_id] = PlayerData(player_id=player_id)
@@ -174,6 +181,7 @@ class GameState:
         self.stocks_per_player = INFINITE_STOCKS
         self.stat_select_remaining_frames = self.stat_select_total_frames
         self.upgrade_shop_remaining_frames = 0
+        self.round_end_remaining_frames = 0
         self.pending_round_transition = None
         self._reset_map_coins()
         for player in self.get_connected_players():
@@ -188,6 +196,7 @@ class GameState:
                 "heavy": None,
                 "special": None,
             }
+            player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def start_game(self) -> None:
         self.phase = "playing"
@@ -196,6 +205,7 @@ class GameState:
         self.winner = None
         self.stat_select_remaining_frames = 0
         self.upgrade_shop_remaining_frames = 0
+        self.round_end_remaining_frames = 0
         self.pending_round_transition = None
         self.is_final_round = False
         self.stocks_per_player = INFINITE_STOCKS
@@ -208,6 +218,7 @@ class GameState:
             player.character.stocks = self.stocks_per_player
             player.character.jumps_remaining = player.character.max_jumps
             player.ready = False
+            player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def update(self) -> List[dict]:
         events = []
@@ -222,6 +233,17 @@ class GameState:
                     events.append({"type": "game_started"})
                 else:
                     self.phase = "lobby"
+
+            return events
+
+        if self.phase == "round_end":
+            if self.round_end_remaining_frames > 0:
+                self.round_end_remaining_frames -= 1
+
+            if self.round_end_remaining_frames <= 0:
+                transition = self.pending_round_transition
+                self._start_upgrade_shop(transition or "preliminary")
+                events.append({"type": "upgrade_shop_started", "round_number": self.round_number})
 
             return events
 
@@ -253,11 +275,11 @@ class GameState:
             if self.game_timer >= self.preliminary_round_duration:
                 self._award_round_coins()
                 if self.round_number < self.preliminary_rounds:
-                    self._start_upgrade_shop("preliminary")
-                    events.append({"type": "upgrade_shop_started", "round_number": self.round_number})
+                    self._start_round_end("preliminary")
+                    events.append({"type": "round_ended", "round_number": self.round_number})
                 else:
-                    self._start_upgrade_shop("final")
-                    events.append({"type": "upgrade_shop_started", "round_number": self.round_number})
+                    self._start_round_end("final")
+                    events.append({"type": "round_ended", "round_number": self.round_number})
             return events
 
         alive_players = [
@@ -276,6 +298,7 @@ class GameState:
     def reset_round(self) -> None:
         self.winner = None
         self.game_timer = 0
+        self.round_end_remaining_frames = 0
         self._reset_map_coins()
 
         for i, player in enumerate(self.get_connected_players()):
@@ -300,6 +323,30 @@ class GameState:
             player.character.jumps_remaining = player.character.max_jumps
             player.character.attack_cooldown = 0
             player.character.attack_frame = 0
+            player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
+
+    def _freeze_characters(self) -> None:
+        for player in self.get_connected_players():
+            if not player.character:
+                continue
+            player.character.vel_x = 0
+            player.character.vel_y = 0
+            player.character.hitstun = 0
+            player.character.is_dashing = False
+            player.character.dash_frames = 0
+            player.character.active_attack = None
+            player.character.attack_frame = 0
+
+    def _start_round_end(self, transition: str) -> None:
+        self.phase = "round_end"
+        self.round_end_remaining_frames = self.round_end_total_frames
+        self.upgrade_shop_remaining_frames = 0
+        self.pending_round_transition = transition
+        self._reset_map_coins()
+        self._freeze_characters()
+        for player in self.get_connected_players():
+            player.ready = False
+            player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def _apply_player_build_to_character(self, player: PlayerData) -> None:
         if not player.character:
@@ -310,10 +357,12 @@ class GameState:
     def _start_upgrade_shop(self, transition: str) -> None:
         self.phase = "upgrade_shop"
         self.upgrade_shop_remaining_frames = self.upgrade_shop_total_frames
+        self.round_end_remaining_frames = 0
         self.pending_round_transition = transition
         self._reset_map_coins()
         for player in self.get_connected_players():
             player.ready = False
+            player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def upgrade_stat(self, player_id: int, stat_name: str) -> bool:
         player = self.players.get(player_id)
@@ -327,6 +376,26 @@ class GameState:
 
         player.coins -= cost
         player.build_stats[stat_name] = current_value + 1
+        player.round_stat_upgrades[stat_name] = player.round_stat_upgrades.get(stat_name, 0) + 1
+        self._apply_player_build_to_character(player)
+        return True
+
+    def downgrade_stat(self, player_id: int, stat_name: str) -> bool:
+        player = self.players.get(player_id)
+        if not player or self.phase != "upgrade_shop" or stat_name not in DEFAULT_BUILD_STATS:
+            return False
+
+        if player.round_stat_upgrades.get(stat_name, 0) <= 0:
+            return False
+
+        current_value = player.build_stats.get(stat_name, 0)
+        if current_value <= 0:
+            return False
+
+        refund = current_value
+        player.coins += refund
+        player.build_stats[stat_name] = current_value - 1
+        player.round_stat_upgrades[stat_name] = max(0, player.round_stat_upgrades.get(stat_name, 0) - 1)
         self._apply_player_build_to_character(player)
         return True
 
@@ -469,6 +538,7 @@ class GameState:
             "stat_point_budget": self.stat_point_budget,
             "stat_select_remaining_frames": self.stat_select_remaining_frames,
             "upgrade_shop_remaining_frames": self.upgrade_shop_remaining_frames,
+            "round_end_remaining_frames": self.round_end_remaining_frames,
             "pending_round_transition": self.pending_round_transition,
             "is_final_round": self.is_final_round,
             "preliminary_rounds": self.preliminary_rounds,
@@ -485,6 +555,7 @@ class GameState:
                     "coins": player.coins,
                     "owned_attack_ids": list(player.owned_attack_ids),
                     "equipped_attacks": dict(player.equipped_attacks),
+                    "round_stat_upgrades": dict(player.round_stat_upgrades),
                     "character_state": player.character.get_state() if player.character else None,
                 }
                 for pid, player in self.players.items()
@@ -501,6 +572,7 @@ class GameState:
         self.stat_point_budget = data.get("stat_point_budget", STAT_POINT_BUDGET)
         self.stat_select_remaining_frames = data.get("stat_select_remaining_frames", 0)
         self.upgrade_shop_remaining_frames = data.get("upgrade_shop_remaining_frames", 0)
+        self.round_end_remaining_frames = data.get("round_end_remaining_frames", 0)
         self.pending_round_transition = data.get("pending_round_transition")
         self.is_final_round = data.get("is_final_round", False)
         self.preliminary_rounds = data.get("preliminary_rounds", PRELIMINARY_ROUNDS)
@@ -533,6 +605,8 @@ class GameState:
                 "special": None,
             }
             player.equipped_attacks.update(pdata.get("equipped_attacks", {}))
+            player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
+            player.round_stat_upgrades.update(pdata.get("round_stat_upgrades", {}))
 
             if pdata["character_state"]:
                 if player.character is None:

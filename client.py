@@ -36,7 +36,9 @@ class Game:
         pygame.init()
         pygame.display.set_caption(GAME_TITLE)
 
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.fullscreen = False
+        self.screen = None
+        self._apply_display_mode()
         self.clock = pygame.time.Clock()
         self.running = True
 
@@ -64,6 +66,7 @@ class Game:
         self.network_sync_interval = 1.0 / max(1, NETWORK_TICK_RATE)
 
         self.background = self._load_background("assets/backgrounds/background_purple.png")
+        self.mouse_capture_active = False
         self.pending_network_actions = {
             "jump": False,
             "dash": False,
@@ -71,8 +74,6 @@ class Game:
             "heavy_attack": False,
             "special_attack": False,
         }
-        self.previous_phase = self.game_state.phase
-        self.round_end_banner_frames = 0
 
     def run(self):
         while self.running:
@@ -90,8 +91,32 @@ class Game:
                 self.running = False
                 return
 
+            if event.type == pygame.MOUSEBUTTONDOWN and self.state == "playing":
+                self.mouse_capture_active = True
+
+            if (
+                (hasattr(pygame, "WINDOWFOCUSLOST") and event.type == pygame.WINDOWFOCUSLOST)
+                or (
+                    event.type == pygame.ACTIVEEVENT
+                    and getattr(event, "gain", 1) == 0
+                    and getattr(event, "state", 0) != 0
+                )
+            ):
+                self.mouse_capture_active = False
+
+            if event.type == pygame.KEYDOWN and (
+                event.key == pygame.K_F11
+                or (event.key == pygame.K_RETURN and (event.mod & pygame.KMOD_ALT))
+            ):
+                self._toggle_fullscreen()
+                continue
+
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if self.state in ("playing", "stat_select", "upgrade_shop"):
+                if self.fullscreen:
+                    self._toggle_fullscreen()
+                    continue
+
+                if self.state in ("playing", "round_end", "stat_select", "upgrade_shop"):
                     self._return_to_menu()
                 elif self.network:
                     self._return_to_menu()
@@ -107,6 +132,8 @@ class Game:
                 self._handle_upgrade_shop_event(event)
             elif self.state == "playing":
                 self._handle_game_event(event)
+            elif self.state == "round_end":
+                pass
             elif self.state == "game_over":
                 self._handle_game_over_event(event)
 
@@ -179,10 +206,6 @@ class Game:
         if not player:
             return
 
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN and not player.ready:
-            self._submit_round_ready()
-            return
-
         if player.ready:
             return
 
@@ -194,10 +217,14 @@ class Game:
         if self.is_local:
             if action_type == "upgrade_stat":
                 self.game_state.upgrade_stat(self.local_player_id, action["stat_name"])
+            elif action_type == "downgrade_stat":
+                self.game_state.downgrade_stat(self.local_player_id, action["stat_name"])
             elif action_type == "buy_attack":
                 self.game_state.buy_attack(self.local_player_id, action["attack_id"])
             elif action_type == "equip_attack":
                 self.game_state.equip_attack(self.local_player_id, action["attack_id"])
+            elif action_type == "ready_for_round":
+                self._submit_round_ready()
             self._refresh_local_character_ref()
             return
 
@@ -205,9 +232,9 @@ class Game:
             return
 
         payload = {"type": action_type, "data": {}}
-        if action_type == "upgrade_stat":
+        if action_type in ("upgrade_stat", "downgrade_stat"):
             payload["data"]["stat_name"] = action["stat_name"]
-        else:
+        elif action_type in ("buy_attack", "equip_attack"):
             payload["data"]["attack_id"] = action["attack_id"]
 
         response = self.network.send(payload)
@@ -216,8 +243,6 @@ class Game:
             self._refresh_local_character_ref()
 
     def _update(self):
-        previous_phase = self.game_state.phase
-
         if self.state == "menu":
             self.menu.animate()
 
@@ -228,14 +253,14 @@ class Game:
             self._update_local_stat_select()
         elif self.is_local and self.state == "upgrade_shop":
             self._update_local_upgrade_shop()
+        elif self.is_local and self.state == "round_end":
+            self.game_state.update()
 
         if self.state == "playing":
             self._update_game()
 
-        self._handle_phase_change(previous_phase, self.game_state.phase)
-        if self.round_end_banner_frames > 0:
-            self.round_end_banner_frames -= 1
         self._update_screen_from_phase()
+        self._update_mouse_visibility()
 
     def _update_game(self):
         if self.game_state.phase != "playing":
@@ -268,6 +293,9 @@ class Game:
             self._render_stat_select()
         elif self.state == "playing":
             self._render_game()
+        elif self.state == "round_end":
+            self._render_game()
+            self.hud.draw_center_announcement("ROUND ENDED", size=92)
         elif self.state == "upgrade_shop":
             self._render_upgrade_shop()
         elif self.state == "game_over":
@@ -286,6 +314,30 @@ class Game:
             return None
 
         return pygame.transform.scale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+    def _apply_display_mode(self):
+        flags = pygame.FULLSCREEN if self.fullscreen else 0
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
+        self._refresh_ui_surfaces()
+
+    def _refresh_ui_surfaces(self):
+        for component_name in ("menu", "hud", "stat_select", "upgrade_shop"):
+            component = getattr(self, component_name, None)
+            if component is not None:
+                component.screen = self.screen
+
+    def _toggle_fullscreen(self):
+        self.fullscreen = not self.fullscreen
+        self._apply_display_mode()
+
+    def _update_mouse_visibility(self):
+        if self.state != "playing":
+            self.mouse_capture_active = False
+            pygame.mouse.set_visible(True)
+            return
+
+        hide_mouse = self.mouse_capture_active and pygame.key.get_focused()
+        pygame.mouse.set_visible(not hide_mouse)
 
     def _render_stat_select(self):
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
@@ -333,9 +385,6 @@ class Game:
             len(self.game_state.get_connected_players()),
             sum(1 for active_player in self.game_state.get_connected_players() if active_player.ready),
         )
-
-        if self.round_end_banner_frames > 0:
-            self.hud.draw_center_announcement("ROUND ENDED", size=84)
 
     def _render_game_over(self):
         if self.game_state.winner is not None:
@@ -449,6 +498,8 @@ class Game:
         if self.is_local:
             if self.game_state.phase == "stat_select":
                 self.state = "stat_select"
+            elif self.game_state.phase == "round_end":
+                self.state = "round_end"
             elif self.game_state.phase == "upgrade_shop":
                 self.state = "upgrade_shop"
             elif self.game_state.phase == "playing":
@@ -459,6 +510,8 @@ class Game:
 
         if self.game_state.phase == "stat_select":
             self.state = "stat_select"
+        elif self.game_state.phase == "round_end":
+            self.state = "round_end"
         elif self.game_state.phase == "upgrade_shop":
             self.state = "upgrade_shop"
         elif self.game_state.phase == "playing":
@@ -526,14 +579,6 @@ class Game:
             if not player.ready:
                 self.game_state.set_player_ready(player.player_id, True)
 
-    def _handle_phase_change(self, previous_phase, current_phase):
-        if previous_phase == current_phase:
-            return
-
-        self.previous_phase = current_phase
-        if previous_phase == "playing" and current_phase == "upgrade_shop":
-            self.round_end_banner_frames = FPS
-
     def _refresh_local_character_ref(self):
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
         self.local_character = player.character if player else None
@@ -572,8 +617,6 @@ class Game:
         self.local_player_id = None
         self.local_character = None
         self.host_ip = ""
-        self.previous_phase = self.game_state.phase
-        self.round_end_banner_frames = 0
         for key in self.pending_network_actions:
             self.pending_network_actions[key] = False
         self.last_network_sync = 0.0

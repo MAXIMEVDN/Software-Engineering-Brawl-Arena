@@ -189,6 +189,8 @@ class GameServer:
                 self.game_state.set_player_ready(player_id, True)
             elif msg_type == "upgrade_stat":
                 self.game_state.upgrade_stat(player_id, data.get("stat_name", ""))
+            elif msg_type == "downgrade_stat":
+                self.game_state.downgrade_stat(player_id, data.get("stat_name", ""))
             elif msg_type == "buy_attack":
                 self.game_state.buy_attack(player_id, data.get("attack_id", ""))
             elif msg_type == "equip_attack":

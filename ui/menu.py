@@ -3,6 +3,7 @@ import os
 import pygame
 
 from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT
+from ui.title_text import get_ui_font
 
 try:
     from PIL import Image
@@ -16,24 +17,21 @@ class Button:
         self.rect = pygame.Rect(x - width // 2, y - height // 2, width, height)
         self.text = text
         self.callback = callback
-        self.hovered = False
-        self.font = pygame.font.Font(None, font_size)
+        self.selected = False
+        self.font = get_ui_font(font_size)
         self.color_normal = (70, 80, 90)
-        self.color_hover = (105, 120, 145)
 
     def handle_event(self, event):
-        if event.type == pygame.MOUSEMOTION:
-            self.hovered = self.rect.collidepoint(event.pos)
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.hovered:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.rect.collidepoint(event.pos):
             if self.callback:
                 self.callback()
             return True
         return False
 
     def draw(self, screen):
-        color = self.color_hover if self.hovered else self.color_normal
-        pygame.draw.rect(screen, color, self.rect, border_radius=12)
-        pygame.draw.rect(screen, Colors.WHITE, self.rect, 2, border_radius=12)
+        pygame.draw.rect(screen, self.color_normal, self.rect, border_radius=12)
+        border_color = Colors.ORANGE if self.selected else Colors.WHITE
+        pygame.draw.rect(screen, border_color, self.rect, 3 if self.selected else 2, border_radius=12)
         text_surface = self.font.render(self.text, True, Colors.WHITE)
         screen.blit(text_surface, text_surface.get_rect(center=self.rect.center))
 
@@ -45,7 +43,8 @@ class TextInput:
         self.text = ""
         self.placeholder = placeholder
         self.active = False
-        self.font = pygame.font.Font(None, font_size)
+        self.selected = False
+        self.font = get_ui_font(font_size)
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -59,9 +58,9 @@ class TextInput:
                 self.text += event.unicode
 
     def draw(self, screen):
-        border_color = Colors.WHITE if self.active else Colors.GRAY
+        border_color = Colors.ORANGE if self.selected else (Colors.WHITE if self.active else Colors.GRAY)
         pygame.draw.rect(screen, (32, 36, 44), self.rect, border_radius=8)
-        pygame.draw.rect(screen, border_color, self.rect, 2, border_radius=8)
+        pygame.draw.rect(screen, border_color, self.rect, 3 if self.selected else 2, border_radius=8)
 
         value = self.text if self.text else self.placeholder
         color = Colors.WHITE if self.text else Colors.GRAY
@@ -84,10 +83,10 @@ class MainMenu:
         self.error_message = ""
         self.info_message = ""
 
-        self.title_font = pygame.font.Font(None, 88)
-        self.subtitle_font = pygame.font.Font(None, 36)
-        self.body_font = pygame.font.Font(None, 28)
-        self.small_font = pygame.font.Font(None, 22)
+        self.title_font = get_ui_font(88)
+        self.subtitle_font = get_ui_font(36)
+        self.body_font = get_ui_font(28)
+        self.small_font = get_ui_font(22)
 
         self.join_ip_input = TextInput(SCREEN_WIDTH // 2, 360, 360, 48, "Host IP (bijv. 192.168.1.42)")
         self.background = self._load_background(self.MENU_BG_PATH)
@@ -96,8 +95,10 @@ class MainMenu:
         self.knight_frame_index = 0
         self.knight_frame_timer = 0
         self.knight_frame_duration = 10
+        self.selected_index = 0
 
         self._create_buttons()
+        self._update_selection_state()
 
     def _create_buttons(self):
         center_x = SCREEN_WIDTH // 2
@@ -228,17 +229,25 @@ class MainMenu:
         self.state = "host_setup"
         self.result = None
         self.error_message = ""
+        self.selected_index = 0
+        self._update_selection_state()
 
     def _show_join_setup(self):
         self.state = "join_setup"
         self.result = None
         self.error_message = ""
+        self.selected_index = 0
+        self.join_ip_input.active = True
+        self._update_selection_state()
 
     def _on_back_to_mode(self):
         self.state = "mode_select"
         self.result = None
         self.error_message = ""
         self.info_message = ""
+        self.selected_index = 0
+        self.join_ip_input.active = False
+        self._update_selection_state()
 
     def _on_create_lobby(self):
         self.result = {"action": "host"}
@@ -261,6 +270,8 @@ class MainMenu:
         ip_part = f" | IP: {host_ip}" if host_ip else ""
         self.info_message = f"Lobby live{ip_part} | Players: {player_count}/4"
         self.result = None
+        self.selected_index = 0
+        self._update_selection_state()
 
     def set_error(self, message):
         self.error_message = message
@@ -275,22 +286,136 @@ class MainMenu:
             self.knight_frame_index = (self.knight_frame_index + 1) % len(self.knight_frames)
 
     def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self._sync_selection_from_mouse(event.pos)
+
         if self.state == "welcome":
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                 self.state = "mode_select"
+                self.selected_index = 0
+                self._update_selection_state()
         elif self.state == "mode_select":
+            if self._handle_keyboard_navigation(event, len(self.mode_buttons)):
+                return
             for button in self.mode_buttons:
                 button.handle_event(event)
         elif self.state == "host_setup":
+            if self._handle_keyboard_navigation(event, len(self.host_buttons)):
+                return
             for button in self.host_buttons:
                 button.handle_event(event)
         elif self.state == "join_setup":
             self.join_ip_input.handle_event(event)
+            if self._handle_join_keyboard_navigation(event):
+                return
             for button in self.join_buttons:
                 button.handle_event(event)
         elif self.state == "host_waiting":
+            if self._handle_keyboard_navigation(event, len(self.wait_buttons)):
+                return
             for button in self.wait_buttons:
                 button.handle_event(event)
+
+    def _sync_selection_from_mouse(self, mouse_pos):
+        if self.state == "mode_select":
+            for index, button in enumerate(self.mode_buttons):
+                if button.rect.collidepoint(mouse_pos):
+                    self.selected_index = index
+                    self._update_selection_state()
+                    return
+        elif self.state == "host_setup":
+            for index, button in enumerate(self.host_buttons):
+                if button.rect.collidepoint(mouse_pos):
+                    self.selected_index = index
+                    self._update_selection_state()
+                    return
+        elif self.state == "join_setup":
+            if self.join_ip_input.rect.collidepoint(mouse_pos):
+                self.selected_index = 0
+                self._update_selection_state()
+                return
+            for index, button in enumerate(self.join_buttons, start=1):
+                if button.rect.collidepoint(mouse_pos):
+                    self.selected_index = index
+                    self._update_selection_state()
+                    return
+        elif self.state == "host_waiting":
+            for index, button in enumerate(self.wait_buttons):
+                if button.rect.collidepoint(mouse_pos):
+                    self.selected_index = index
+                    self._update_selection_state()
+                    return
+
+        self._update_selection_state()
+
+    def _handle_keyboard_navigation(self, event, button_count):
+        if event.type != pygame.KEYDOWN:
+            return False
+        if event.key in (pygame.K_w, pygame.K_UP, pygame.K_a, pygame.K_LEFT):
+            self.selected_index = (self.selected_index - 1) % button_count
+            self._update_selection_state()
+            return True
+        if event.key in (pygame.K_s, pygame.K_DOWN, pygame.K_d, pygame.K_RIGHT):
+            self.selected_index = (self.selected_index + 1) % button_count
+            self._update_selection_state()
+            return True
+        if event.key == pygame.K_RETURN:
+            self._activate_selected()
+            return True
+        return False
+
+    def _handle_join_keyboard_navigation(self, event):
+        if event.type != pygame.KEYDOWN:
+            return False
+
+        focus_count = 3
+        if event.key in (pygame.K_w, pygame.K_UP, pygame.K_a, pygame.K_LEFT):
+            self.selected_index = (self.selected_index - 1) % focus_count
+            self.join_ip_input.active = self.selected_index == 0
+            self._update_selection_state()
+            return True
+        if event.key in (pygame.K_s, pygame.K_DOWN, pygame.K_d, pygame.K_RIGHT):
+            self.selected_index = (self.selected_index + 1) % focus_count
+            self.join_ip_input.active = self.selected_index == 0
+            self._update_selection_state()
+            return True
+        if event.key == pygame.K_RETURN:
+            if self.selected_index == 0:
+                self.join_ip_input.active = True
+            elif self.selected_index == 1:
+                self._on_join_lobby()
+            else:
+                self._on_back_to_mode()
+            self._update_selection_state()
+            return True
+        return False
+
+    def _activate_selected(self):
+        if self.state == "mode_select":
+            self.mode_buttons[self.selected_index].callback()
+        elif self.state == "host_setup":
+            self.host_buttons[self.selected_index].callback()
+        elif self.state == "host_waiting":
+            self.wait_buttons[self.selected_index].callback()
+
+    def _update_selection_state(self):
+        for button_group in (self.mode_buttons, self.host_buttons, self.join_buttons, self.wait_buttons):
+            for button in button_group:
+                button.selected = False
+
+        self.join_ip_input.selected = self.state == "join_setup" and self.selected_index == 0
+
+        if self.state == "mode_select" and self.mode_buttons:
+            self.mode_buttons[self.selected_index % len(self.mode_buttons)].selected = True
+        elif self.state == "host_setup" and self.host_buttons:
+            self.host_buttons[self.selected_index % len(self.host_buttons)].selected = True
+        elif self.state == "join_setup":
+            if self.selected_index == 1 and self.join_buttons:
+                self.join_buttons[0].selected = True
+            elif self.selected_index == 2 and len(self.join_buttons) > 1:
+                self.join_buttons[1].selected = True
+        elif self.state == "host_waiting" and self.wait_buttons:
+            self.wait_buttons[self.selected_index % len(self.wait_buttons)].selected = True
 
     def update(self):
         result = self.result

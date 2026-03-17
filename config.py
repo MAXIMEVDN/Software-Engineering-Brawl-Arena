@@ -251,6 +251,7 @@ CONNECTION_TIMEOUT = 5.0  # seconds
 DISCOVERY_TIMEOUT = 1.0  # seconds
 STAT_SELECT_SECONDS = 30
 INTERMISSION_SECONDS = 30
+ROUND_END_DURATION = int(1.5 * FPS)
 STAT_POINT_BUDGET = 10
 
 BUILD_STAT_NAMES = ["power", "defense", "mobility", "knockback", "range"]

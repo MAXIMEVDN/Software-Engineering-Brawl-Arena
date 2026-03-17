@@ -6,6 +6,7 @@ TITLE_TEXT_COLOR = (247, 233, 214)
 TITLE_SHADOW_COLOR = (60, 34, 34)
 TITLE_OUTLINE_COLOR = (0, 0, 0)
 _TITLE_FONT_CACHE = {}
+_UI_FONT_CACHE = {}
 _TITLE_FONT_NAMES = [
     "pressstart2p",
     "prstartk",
@@ -20,6 +21,20 @@ _BUNDLED_FONT_PATH = os.path.join(
     "fonts",
     "determination.ttf",
 )
+
+
+def get_ui_font(size):
+    font = _UI_FONT_CACHE.get(size)
+    if font is not None:
+        return font
+
+    if os.path.exists(_BUNDLED_FONT_PATH):
+        font = pygame.font.Font(_BUNDLED_FONT_PATH, size)
+    else:
+        font = pygame.font.Font(None, size)
+
+    _UI_FONT_CACHE[size] = font
+    return font
 
 
 def get_title_style_font(size):
@@ -37,11 +52,19 @@ def get_title_style_font(size):
     if font_path:
         font = pygame.font.Font(font_path, size)
     else:
-        font = pygame.font.Font(None, size)
+        font = get_ui_font(size)
         font.set_bold(True)
 
     _TITLE_FONT_CACHE[size] = font
     return font
+
+
+def render_fit_text(text, color, max_width, preferred_size, min_size=12):
+    for size in range(preferred_size, min_size - 1, -1):
+        surface = get_ui_font(size).render(text, True, color)
+        if surface.get_width() <= max_width or size == min_size:
+            return surface
+    return get_ui_font(min_size).render(text, True, color)
 
 
 def draw_title_style_text(
