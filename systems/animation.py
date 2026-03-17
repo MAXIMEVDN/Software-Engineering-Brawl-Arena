@@ -27,9 +27,10 @@ class AnimationSystem:
         config = SPRITE_CONFIG.get(character_name, SPRITE_CONFIG.get("default", {}))
 
         for anim_name, anim_config in config.items():
+            folder = anim_config.get("folder", character_name)
             file_path = os.path.join(
                 self.sprites_path,
-                character_name,
+                folder,
                 anim_config.get("file", f"{anim_name}.png")
             )
 

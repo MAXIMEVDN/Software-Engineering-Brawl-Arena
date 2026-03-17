@@ -4,13 +4,32 @@
 # Ze overschrijven de drie attack-methodes met hun eigen aanvallen.
 
 import math
+import os
 import pygame
 
 from config import (
     CharacterStats, Colors, GRAVITY, MAX_FALL_SPEED,
-    GROUND_FRICTION, AIR_FRICTION, KILL_BOUNDARY, CONTROLS
+    GROUND_FRICTION, AIR_FRICTION, KILL_BOUNDARY, CONTROLS, SPRITE_CONFIG
 )
 from entities.attack import Attack
+
+
+_SPRITE_RENDER_SIZE = 192  # Pixels to render each sprite frame (square)
+_shared_sprites = None    # Raw scaled frames, loaded once and shared
+
+# Tint colors per player — bright enough for BLEND_MULT to produce a visible hue
+_PLAYER_TINT_COLORS = [
+    (255, 150, 150),  # P1 - red
+    (150, 150, 255),  # P2 - blue
+    (150, 255, 150),  # P3 - green
+    (255, 255, 140),  # P4 - yellow
+]
+
+
+def _apply_tint(surface, tint_color):
+    tinted = surface.copy()
+    tinted.fill(tint_color, special_flags=pygame.BLEND_MULT)
+    return tinted
 
 
 class BaseCharacter:
@@ -72,6 +91,7 @@ class BaseCharacter:
         self.color = Colors.PLAYER_COLORS[player_id % len(Colors.PLAYER_COLORS)]
         self.sprites = {}
         self.sprites_loaded = False
+        self._prev_state = "idle"
 
         # Build-stats voor de pre-game verdeling.
         self.build_stats = {
@@ -228,8 +248,8 @@ class BaseCharacter:
         else:
             self.vel_x *= AIR_FRICTION
 
-        # Stop bij een hele kleine snelheid
-        if abs(self.vel_x) < 0.1:
+        # Stop als snelheid onder de run-drempel valt zodat idle nooit flikkert
+        if abs(self.vel_x) < 0.5:
             self.vel_x = 0
 
     def _update_timers(self):
@@ -257,7 +277,7 @@ class BaseCharacter:
 
         for platform in platforms:
             if self._collides_with_platform(platform):
-                if self.vel_y > 0:
+                if self.vel_y >= 0:
                     self.y = platform.y - self.height
                     self.vel_y = 0
                     self.on_ground = True
@@ -487,41 +507,90 @@ class BaseCharacter:
 
     def _update_animation_state(self):
         # Bepaal welke animatie afgespeeld wordt op basis van wat de character doet.
-        if self.active_attack:
-            return  # Aanvalsanimatie heeft prioriteit
-
-        if self.hitstun > 0:
-            self.state = "hurt"
-        elif self.is_dashing:
-            self.state = "dash"
-        elif not self.on_ground:
-            if self.vel_y < 0:
-                self.state = "jump"
+        if not self.active_attack:
+            if self.hitstun > 0:
+                self.state = "hurt"
+            elif self.is_dashing:
+                self.state = "dash"
+            elif not self.on_ground:
+                if self.vel_y < 0:
+                    self.state = "jump"
+                else:
+                    self.state = "fall"
+            elif abs(self.vel_x) > 0.5:
+                self.state = "run"
             else:
-                self.state = "fall"
-        elif abs(self.vel_x) > 0.5:
-            self.state = "run"
+                self.state = "idle"
+
+        # Reset timer when animation changes
+        if self.state != self._prev_state:
+            self.animation_timer = 0
+            self._prev_state = self.state
         else:
-            self.state = "idle"
+            self.animation_timer += 1
+
+        # Calculate current frame index
+        config = SPRITE_CONFIG.get("default", {}).get(self.state, {})
+        num_frames = config.get("frames", 4)
+        speed = config.get("animation_speed", 5)
+        self.animation_frame = (self.animation_timer // speed) % num_frames
 
     def get_rect(self):
         # Geef de collision-rechthoek van de character terug.
         return pygame.Rect(self.x, self.y, self.width, self.height)
+
+    def _load_sprites(self):
+        global _shared_sprites
+        if _shared_sprites is None:
+            from systems.animation import AnimationSystem
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            sprites_path = os.path.join(root_dir, "assets", "sprites")
+            anim_sys = AnimationSystem(sprites_path)
+            raw = anim_sys.load_character_sprites("default")
+            size = _SPRITE_RENDER_SIZE
+            _shared_sprites = {
+                anim_name: [pygame.transform.scale(f, (size, size)) for f in frames]
+                for anim_name, frames in raw.items()
+            }
+        # Apply player-specific color tint and pre-cache both directions so we
+        # never call transform.flip() in the hot draw path.
+        tint = _PLAYER_TINT_COLORS[self.player_id % len(_PLAYER_TINT_COLORS)]
+        self.sprites = {}
+        for anim_name, frames in _shared_sprites.items():
+            tinted = [_apply_tint(f, tint) for f in frames]
+            flipped = [pygame.transform.flip(f, True, False) for f in tinted]
+            self.sprites[anim_name] = {True: tinted, False: flipped}
+        self.sprites_loaded = True
+
+    def _get_current_sprite_frame(self):
+        anim = self.sprites.get(self.state) or self.sprites.get("idle")
+        if not anim:
+            return None
+        frames = anim[self.facing_right]
+        return frames[self.animation_frame % len(frames)]
 
     def draw(self, screen, camera_offset=(0, 0)):
         # Teken de character op het scherm.
         draw_x = self.x - camera_offset[0]
         draw_y = self.y - camera_offset[1]
 
-        # Flash wit tijdens onkwetsbaarheidsframes
-        color = self.color
-        if self.invincible > 0 and self.invincible % 10 < 5:
-            color = Colors.WHITE
-
+        # Laad sprites bij eerste draw-aanroep
         if not self.sprites_loaded:
-            pygame.draw.rect(screen, color, (draw_x, draw_y, self.width, self.height))
+            self._load_sprites()
 
-            # Kleine witte blok toont welke kant de character op kijkt
+        # Invincibility blink: sla elke andere periode over
+        if self.invincible > 0 and self.invincible % 10 < 5:
+            return
+
+        if self.sprites_loaded:
+            frame = self._get_current_sprite_frame()
+            if frame:
+                size = _SPRITE_RENDER_SIZE
+                sprite_x = draw_x + (self.width - size) // 2
+                sprite_y = draw_y + self.height - size
+                screen.blit(frame, (sprite_x, sprite_y))
+        else:
+            pygame.draw.rect(screen, self.color, (draw_x, draw_y, self.width, self.height))
             indicator_x = draw_x + (self.width - 10) if self.facing_right else draw_x
             pygame.draw.rect(screen, Colors.WHITE, (indicator_x, draw_y + 10, 10, 10))
 

@@ -155,61 +155,73 @@ SPAWN_POSITIONS = [
 ]
 
 
-# Sprite sheet configuratie (placeholder voor custom sprites)
+# Sprite sheet configuratie
 SPRITE_CONFIG = {
     "default": {
         "idle": {
-            "frames": 4,
-            "frame_width": 64,
-            "frame_height": 64,
-            "animation_speed": 8,  # frames per sprite frame
+            "file": "Idle_Stand.png",
+            "frames": 1,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 8,
         },
         "run": {
-            "frames": 6,
-            "frame_width": 64,
-            "frame_height": 64,
-            "animation_speed": 5,
+            "file": "Running.png",
+            "frames": 12,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 4,
         },
         "jump": {
-            "frames": 2,
-            "frame_width": 64,
-            "frame_height": 64,
-            "animation_speed": 6,
+            "file": "Jumping.png",
+            "frames": 10,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 5,
         },
         "fall": {
-            "frames": 2,
-            "frame_width": 64,
-            "frame_height": 64,
-            "animation_speed": 6,
+            "file": "Falling.png",
+            "frames": 11,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 5,
         },
-        "punch1": {
-            "frames": 6,
-            "frame_width": 64,
-            "frame_height": 64,
+        "dash": {
+            "file": "Roll.png",
+            "frames": 9,
+            "frame_width": 128,
+            "frame_height": 128,
             "animation_speed": 3,
         },
-        "punch2": {
-            "frames": 6,
-            "frame_width": 64,
-            "frame_height": 64,
+        "hurt": {
+            "file": "Falling.png",
+            "frames": 11,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 4,
+        },
+        "punch1": {
+            "file": "Punch_1.png",
+            "folder": "attacks",
+            "frames": 5,
+            "frame_width": 128,
+            "frame_height": 128,
             "animation_speed": 3,
         },
         "kick": {
-            "frames": 6,
-            "frame_width": 64,
-            "frame_height": 64,
-            "animation_speed": 3,
-        },
-        "jump_kick": {
-            "frames": 6,
-            "frame_width": 64,
-            "frame_height": 64,
+            "file": "Ground_Slam.png",
+            "folder": "attacks",
+            "frames": 12,
+            "frame_width": 128,
+            "frame_height": 128,
             "animation_speed": 3,
         },
         "special": {
-            "frames": 6,
-            "frame_width": 64,
-            "frame_height": 64,
+            "file": "Fire_Kick.png",
+            "folder": "attacks",
+            "frames": 11,
+            "frame_width": 128,
+            "frame_height": 128,
             "animation_speed": 3,
         },
     }
