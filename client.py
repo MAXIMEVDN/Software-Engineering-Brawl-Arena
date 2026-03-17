@@ -66,6 +66,9 @@ class Game:
         self.last_network_sync = 0.0
         self.network_sync_interval = 1.0 / max(1, NETWORK_TICK_RATE)
 
+        # Achtergrond
+        self.background = self._load_background("assets/backgrounds/background_day.png")
+
         # Eenmalige acties die nog naar de server gestuurd moeten worden
         self.pending_network_actions = {
             "jump": False,
@@ -238,9 +241,24 @@ class Game:
             self._render_game()
             self._render_game_over()
 
+    def _load_background(self, path):
+        # Laad de achtergrondafbeelding en schaal deze naar schermgrootte.
+        if not os.path.exists(path):
+            return None
+
+        try:
+            image = pygame.image.load(path).convert()
+        except pygame.error:
+            return None
+
+        return pygame.transform.scale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
     def _render_game(self):
         # Teken het speelveld.
-        self.screen.fill(Colors.BG_COLOR)
+        if self.background:
+            self.screen.blit(self.background, (0, 0))
+        else:
+            self.screen.fill(Colors.BG_COLOR)
 
         for platform in self.platforms:
             platform.draw(self.screen, self.camera_offset)
