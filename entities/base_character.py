@@ -9,13 +9,21 @@ import pygame
 
 from config import (
     CharacterStats, Colors, GRAVITY, MAX_FALL_SPEED,
-    GROUND_FRICTION, AIR_FRICTION, KILL_BOUNDARY, CONTROLS, SPRITE_CONFIG
+    GROUND_FRICTION, AIR_FRICTION, KILL_BOUNDARY, CONTROLS, SPRITE_CONFIG,
+    STAT_POINT_BUDGET,
 )
 from entities.attack import Attack
 
 
 _SPRITE_RENDER_SIZE = 192  # Pixels to render each sprite frame (square)
-_shared_sprites = None    # Raw scaled frames, loaded once and shared
+_shared_sprites = None    # Raw scaled frames, loaded once and shared per process
+
+# States whose animation plays once and holds on the last frame (no looping)
+_NON_LOOPING_STATES = frozenset({
+    "jump_stationary", "jump_moving", "double_jump",
+    "landing", "landing_impact",
+    "punch1", "kick", "special",
+})
 
 # Tint colors per player — saturated so BLEND_MULT produces vivid hues
 _PLAYER_TINT_COLORS = [
@@ -81,6 +89,9 @@ class BaseCharacter:
         self.state = "idle"
         self.animation_frame = 0
         self.animation_timer = 0
+        self.jump_type = "stationary"   # "stationary" | "moving" | "double"
+        self.prev_on_ground = False     # on_ground van het vorige frame (voor landing-detectie)
+        self.landing_timer = 0          # frames gespendeerd in landing/landing_impact
 
         # Actieve aanval
         self.active_attack = None
@@ -377,9 +388,13 @@ class BaseCharacter:
     def jump(self):
         # Spring als er nog sprongen over zijn.
         if self.jumps_remaining > 0 and not self.active_attack:
-            if self.on_ground:
+            if self.on_ground or self.jumps_remaining == self.max_jumps:
+                # Eerste sprong (van de grond of na van platform af gelopen)
+                self.jump_type = "moving" if abs(self.vel_x) > 0.5 else "stationary"
                 self.vel_y = self.jump_power
             else:
+                # Dubbele sprong
+                self.jump_type = "double"
                 self.vel_y = self.double_jump_power
             self.jumps_remaining -= 1
             self.on_ground = False
@@ -501,6 +516,9 @@ class BaseCharacter:
         self.jumps_remaining = self.max_jumps
         self.last_attacker_id = None
         self.last_attacker_timer = 0
+        self.jump_type = "stationary"
+        self.landing_timer = 0
+        self.prev_on_ground = False
 
     def consume_gameplay_events(self):
         events = list(self.gameplay_events)
@@ -510,32 +528,91 @@ class BaseCharacter:
     def _update_animation_state(self):
         # Bepaal welke animatie afgespeeld wordt op basis van wat de character doet.
         if not self.active_attack:
+            just_landed = self.on_ground and not self.prev_on_ground
+
             if self.hitstun > 0:
-                self.state = "hurt"
+                if not self.on_ground:
+                    # Knockback in de lucht → Falling.png
+                    self.state = "hurt"
+                elif just_landed and self.state == "hurt":
+                    # Net geland vanuit knockback → zware landing
+                    self.state = "landing_impact"
+                    self.landing_timer = 0
+                elif self.state == "landing_impact":
+                    # Hitstun loopt nog terwijl landing_impact afspeelt
+                    cfg = SPRITE_CONFIG["default"].get("landing_impact", {})
+                    total = cfg.get("frames", 13) * cfg.get("animation_speed", 3)
+                    if self.landing_timer >= total:
+                        self.state = "idle"
+                    else:
+                        self.landing_timer += 1
+
+            elif self.state == "landing_impact":
+                # Hitstun voorbij maar animatie nog niet klaar
+                cfg = SPRITE_CONFIG["default"].get("landing_impact", {})
+                total = cfg.get("frames", 13) * cfg.get("animation_speed", 3)
+                if self.landing_timer >= total:
+                    self.state = "idle"
+                else:
+                    self.landing_timer += 1
+
+            elif self.state == "landing":
+                cfg = SPRITE_CONFIG["default"].get("landing", {})
+                total = cfg.get("frames", 6) * cfg.get("animation_speed", 4)
+                if self.landing_timer >= total:
+                    self.state = "idle"
+                else:
+                    self.landing_timer += 1
+
             elif self.is_dashing:
                 self.state = "dash"
-            elif not self.on_ground:
-                if self.vel_y < 0:
-                    self.state = "jump"
-                else:
-                    self.state = "fall"
-            elif abs(self.vel_x) > 0.5:
-                self.state = "run"
-            else:
-                self.state = "idle"
 
-        # Reset timer when animation changes
+            elif not self.on_ground:
+                # Eigen sprong — type werd ingesteld in jump()
+                if self.jump_type == "double":
+                    self.state = "double_jump"
+                elif self.jump_type == "moving":
+                    self.state = "jump_moving"
+                else:
+                    self.state = "jump_stationary"
+
+            else:
+                # Op de grond, geen hitstun, niet aan het dashen
+                if just_landed and self.state in ("jump_stationary", "jump_moving", "double_jump"):
+                    # Normale landing na eigen sprong
+                    self.state = "landing"
+                    self.landing_timer = 0
+                    self.jump_type = "stationary"  # reset voor volgende sprong
+                elif abs(self.vel_x) > 0.5:
+                    mobility = self.build_stats["mobility"]
+                    if mobility >= STAT_POINT_BUDGET * 2 / 3:
+                        self.state = "speed_run"
+                    elif mobility >= STAT_POINT_BUDGET / 3:
+                        self.state = "run"
+                    else:
+                        self.state = "walk"
+                else:
+                    self.state = "idle"
+
+        self.prev_on_ground = self.on_ground
+
+        # Reset timer wanneer de animatie verandert
         if self.state != self._prev_state:
             self.animation_timer = 0
             self._prev_state = self.state
         else:
             self.animation_timer += 1
 
-        # Calculate current frame index
+        # Bereken het huidige frame-index
         config = SPRITE_CONFIG.get("default", {}).get(self.state, {})
         num_frames = config.get("frames", 4)
         speed = config.get("animation_speed", 5)
-        self.animation_frame = (self.animation_timer // speed) % num_frames
+
+        if self.state in _NON_LOOPING_STATES:
+            # Niet-lopende animaties: vasthouden op het laatste frame
+            self.animation_frame = min(self.animation_timer // speed, num_frames - 1)
+        else:
+            self.animation_frame = (self.animation_timer // speed) % num_frames
 
     def get_rect(self):
         # Geef de collision-rechthoek van de character terug.
@@ -617,6 +694,8 @@ class BaseCharacter:
             "state": self.state,
             "animation_frame": self.animation_frame,
             "animation_timer": self.animation_timer,
+            "jump_type": self.jump_type,
+            "landing_timer": self.landing_timer,
             "on_ground": self.on_ground,
             "hitstun": self.hitstun,
             "invincible": self.invincible,
@@ -644,8 +723,11 @@ class BaseCharacter:
         self.state = state["state"]
         self.animation_frame = state.get("animation_frame", 0)
         self.animation_timer = state.get("animation_timer", 0)
+        self.jump_type = state.get("jump_type", "stationary")
+        self.landing_timer = state.get("landing_timer", 0)
         self._prev_state = self.state
         self.on_ground = state["on_ground"]
+        self.prev_on_ground = self.on_ground
         self.hitstun = state["hitstun"]
         self.invincible = state["invincible"]
         self.is_dashing = state.get("is_dashing", False)

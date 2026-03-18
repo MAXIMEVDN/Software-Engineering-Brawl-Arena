@@ -439,7 +439,7 @@ class GameState:
                 if event.get("type") != "death":
                     continue
 
-                player.coins -= COINS_LOST_ON_DEATH
+                player.coins = max(0, player.coins - COINS_LOST_ON_DEATH)
                 killer_id = event.get("killer_id")
                 killer = self.players.get(killer_id) if killer_id is not None else None
                 if killer and killer.connected and killer.player_id != player.player_id:

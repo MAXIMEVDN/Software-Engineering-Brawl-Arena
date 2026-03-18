@@ -158,12 +158,20 @@ SPAWN_POSITIONS = [
 # Sprite sheet configuratie
 SPRITE_CONFIG = {
     "default": {
+        # Grounded movement
         "idle": {
             "file": "Idle_Stand.png",
             "frames": 1,
             "frame_width": 128,
             "frame_height": 128,
             "animation_speed": 8,
+        },
+        "walk": {
+            "file": "Walking.png",
+            "frames": 12,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 5,
         },
         "run": {
             "file": "Running.png",
@@ -172,20 +180,59 @@ SPRITE_CONFIG = {
             "frame_height": 128,
             "animation_speed": 4,
         },
-        "jump": {
+        "speed_run": {
+            "file": "Speed_Boost_Running.png",
+            "frames": 12,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+        },
+        # Jump states — each triggered by a different jump condition
+        "jump_stationary": {
+            "file": "Side_Jump.png",
+            "frames": 10,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 4,
+        },
+        "jump_moving": {
             "file": "Jumping.png",
             "frames": 10,
             "frame_width": 128,
             "frame_height": 128,
-            "animation_speed": 5,
+            "animation_speed": 4,
         },
-        "fall": {
+        "double_jump": {
+            "file": "Double_Jump.png",
+            "frames": 11,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 4,
+        },
+        # Knockback — Falling.png is ONLY for knockback, not normal falling
+        "hurt": {
             "file": "Falling.png",
             "frames": 11,
             "frame_width": 128,
             "frame_height": 128,
-            "animation_speed": 5,
+            "animation_speed": 3,
         },
+        # Landing animations
+        "landing": {
+            "file": "Landing.png",
+            "frames": 6,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 4,
+        },
+        "landing_impact": {
+            "file": "Landing with Impact.png",
+            "frames": 13,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+        },
+        # Dash
         "dash": {
             "file": "Roll.png",
             "frames": 9,
@@ -193,13 +240,7 @@ SPRITE_CONFIG = {
             "frame_height": 128,
             "animation_speed": 3,
         },
-        "hurt": {
-            "file": "Falling.png",
-            "frames": 11,
-            "frame_width": 128,
-            "frame_height": 128,
-            "animation_speed": 4,
-        },
+        # Attacks
         "punch1": {
             "file": "Punch_1.png",
             "folder": "attacks",
