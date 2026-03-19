@@ -57,6 +57,8 @@ class CollisionSystem:
     def _apply_hit(self, attacker, target, attack):
         # Registreer de treffer en pas schade en knockback toe.
         attack.register_hit(target.player_id)
+        if target.try_parry_hit(attacker, attack):
+            return
         if getattr(attack, "effect_type", None) == "grab":
             attacker.handle_grab_hit(target, attack)
             return

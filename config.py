@@ -380,6 +380,25 @@ ULTIMATE_SHOP_ITEMS = [
         "throw_angle": 42,
         "glow_color": (120, 255, 160),
     },
+    {
+        "id": "parry_counter",
+        "name": "Parry Counter",
+        "cost": 10,
+        "focus": "Defense",
+        "description": "Summon a shield bubble. If it catches a hit, the bubble explodes and blasts everyone nearby.",
+        "cast_frames": 6,
+        "parry_frames": 16,
+        "recovery_frames": 20,
+        "cooldown_frames": 7 * FPS,
+        "miss_cooldown_frames": int(1.5 * FPS),
+        "counter_damage": 16,
+        "counter_knockback_base": 13.0,
+        "counter_knockback_scaling": 0.16,
+        "counter_knockback_angle": 52,
+        "counter_hitbox_width": 152,
+        "counter_hitbox_height": 124,
+        "glow_color": (120, 220, 255),
+    },
 ]
 ULTIMATE_SHOP_INDEX = {item["id"]: item for item in ULTIMATE_SHOP_ITEMS}
 

@@ -35,7 +35,7 @@ class Attack:
                  knockback_angle, startup_frames, active_frames, recovery_frames,
                  hitbox_width, hitbox_height, hitbox_offset_x=0, hitbox_offset_y=0,
                  effect_type=None, hold_frames=0, throw_knockback_base=0.0,
-                 throw_knockback_scaling=0.0, throw_angle=0):
+                 throw_knockback_scaling=0.0, throw_angle=0, anchor_mode="facing"):
         self.name = name
         self.damage = damage
         self.knockback_base = knockback_base
@@ -55,6 +55,7 @@ class Attack:
         self.throw_knockback_base = throw_knockback_base
         self.throw_knockback_scaling = throw_knockback_scaling
         self.throw_angle = throw_angle
+        self.anchor_mode = anchor_mode
 
         # Runtime-staat
         self.hitbox = Hitbox(0, 0, hitbox_width, hitbox_height)
@@ -64,6 +65,10 @@ class Attack:
 
     def update_position(self, owner_x, owner_y, facing_right, owner_width):
         # Verplaats de hitbox mee met de character.
+        if self.anchor_mode == "center":
+            self.hitbox.x = owner_x + (owner_width - self.hitbox_width) / 2
+            self.hitbox.y = owner_y + self.hitbox_offset_y
+            return
         if facing_right:
             self.hitbox.x = owner_x + owner_width + self.hitbox_offset_x
         else:
@@ -107,6 +112,7 @@ class Attack:
             "throw_knockback_base": self.throw_knockback_base,
             "throw_knockback_scaling": self.throw_knockback_scaling,
             "throw_angle": self.throw_angle,
+            "anchor_mode": self.anchor_mode,
             "is_active": self.is_active,
             "hitbox": {
                 "x": self.hitbox.x,
@@ -139,6 +145,7 @@ class Attack:
             throw_knockback_base=data.get("throw_knockback_base", 0.0),
             throw_knockback_scaling=data.get("throw_knockback_scaling", 0.0),
             throw_angle=data.get("throw_angle", 0),
+            anchor_mode=data.get("anchor_mode", "facing"),
         )
         attack.is_active = data["is_active"]
         attack.hitbox.x = data["hitbox"]["x"]

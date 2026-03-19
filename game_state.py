@@ -319,6 +319,8 @@ class GameState:
             player.character.grab_hold_timer = 0
             player.character.absorbed_by_id = None
             player.character._grabbed_target_ref = None
+            player.character.parry_active_timer = 0
+            player.character.parry_recovery_timer = 0
             player.character.cancel_ultimate_preview()
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
@@ -341,6 +343,8 @@ class GameState:
             player.character.grab_hold_timer = 0
             player.character.absorbed_by_id = None
             player.character._grabbed_target_ref = None
+            player.character.parry_active_timer = 0
+            player.character.parry_recovery_timer = 0
             player.character.cancel_ultimate_preview()
 
     def _start_round_end(self, transition: str) -> None:

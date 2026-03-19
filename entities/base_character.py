@@ -143,6 +143,8 @@ class BaseCharacter:
         self.grab_hold_timer = 0
         self.absorbed_by_id = None
         self._grabbed_target_ref = None
+        self.parry_active_timer = 0
+        self.parry_recovery_timer = 0
 
     def light_attack(self):
         # Geeft een Attack-object terug voor de lichte aanval.
@@ -325,6 +327,13 @@ class BaseCharacter:
                 self.end_invisibility(start_cooldown=True)
         if self.grab_hold_timer > 0 and self.grabbed_target_id is not None:
             self.grab_hold_timer -= 1
+        if self.parry_active_timer > 0:
+            self.parry_active_timer -= 1
+            if self.parry_active_timer <= 0 and self.parry_recovery_timer <= 0:
+                self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["parry_counter"]["miss_cooldown_frames"]
+                self.parry_recovery_timer = ULTIMATE_SHOP_INDEX["parry_counter"]["recovery_frames"]
+        if self.parry_recovery_timer > 0:
+            self.parry_recovery_timer -= 1
         if self.last_attacker_timer > 0:
             self.last_attacker_timer -= 1
             if self.last_attacker_timer <= 0:
@@ -368,7 +377,7 @@ class BaseCharacter:
 
     def handle_input(self, keys):
         # Verwerk ingedrukte toetsen (voor beweging links/rechts en crouch).
-        if self.hitstun > 0 or self.ultimate_cast_timer > 0 or self.absorbed_by_id is not None:
+        if self.hitstun > 0 or self.ultimate_cast_timer > 0 or self.absorbed_by_id is not None or self.parry_active_timer > 0 or self.parry_recovery_timer > 0:
             return None
 
         crouching = self.on_ground and any(keys[k] for k in CONTROLS["down"])
@@ -387,7 +396,7 @@ class BaseCharacter:
 
     def handle_key_down(self, key):
         # Verwerk één toetsdruk (springen, dash, aanval).
-        if self.hitstun > 0 or self.absorbed_by_id is not None:
+        if self.hitstun > 0 or self.absorbed_by_id is not None or self.parry_active_timer > 0 or self.parry_recovery_timer > 0:
             return None
 
         if key in CONTROLS["ultimate_ability"]:
@@ -423,7 +432,7 @@ class BaseCharacter:
 
     def apply_input_state(self, input_state):
         # Verwerk input vanuit de server (netwerkmodus).
-        if self.hitstun > 0 or self.absorbed_by_id is not None:
+        if self.hitstun > 0 or self.absorbed_by_id is not None or self.parry_active_timer > 0 or self.parry_recovery_timer > 0:
             return
 
         if input_state.get("ultimate_trigger"):
@@ -577,7 +586,7 @@ class BaseCharacter:
             return False
         if self.active_attack or self.attack_cooldown > 0:
             return False
-        if self.equipped_ultimate_id not in ("fireball", "invisibility", "grab"):
+        if self.equipped_ultimate_id not in ("fireball", "invisibility", "grab", "parry_counter"):
             return False
         if self.ultimate_cooldown_timer > 0:
             return False
@@ -630,9 +639,11 @@ class BaseCharacter:
             self._activate_invisibility()
         elif self.casting_ultimate_id == "grab":
             self._start_grab_attack()
+        elif self.casting_ultimate_id == "parry_counter":
+            self._start_parry_counter()
 
         self.casting_ultimate_id = None
-        if not self.ultimate_preview_active:
+        if not self.ultimate_preview_active and self.parry_active_timer <= 0:
             self.teleport_glow_color = None
 
     def _perform_teleportation(self):
@@ -721,6 +732,55 @@ class BaseCharacter:
         self.active_attack.owner_id = self.player_id
         self.attack_frame = 0
         self.state = "special"
+
+    def _start_parry_counter(self):
+        ultimate = ULTIMATE_SHOP_INDEX["parry_counter"]
+        self.parry_active_timer = ultimate["parry_frames"]
+        self.parry_recovery_timer = 0
+        self.state = "special"
+
+    def try_parry_hit(self, attacker, attack):
+        if self.parry_active_timer <= 0:
+            return False
+
+        ultimate = ULTIMATE_SHOP_INDEX["parry_counter"]
+        knockback_base, knockback_scaling = self._scale_knockback(
+            ultimate["counter_knockback_base"],
+            ultimate["counter_knockback_scaling"],
+        )
+        hitbox_width, hitbox_height, _, hitbox_offset_y = self._scale_attack_range(
+            ultimate["counter_hitbox_width"],
+            ultimate["counter_hitbox_height"],
+            0,
+            (self.height - ultimate["counter_hitbox_height"]) // 2,
+        )
+        self.parry_active_timer = 0
+        self.parry_recovery_timer = 0
+        self.ultimate_cooldown_timer = ultimate["cooldown_frames"]
+        self.teleport_glow_color = None
+        self.active_ultimate_projectile = None
+        self.active_attack = Attack(
+            name="Parry Counter",
+            damage=self._scale_damage(ultimate["counter_damage"]),
+            knockback_base=knockback_base,
+            knockback_scaling=knockback_scaling,
+            knockback_angle=ultimate["counter_knockback_angle"],
+            startup_frames=0,
+            active_frames=6,
+            recovery_frames=ultimate["recovery_frames"],
+            hitbox_width=hitbox_width,
+            hitbox_height=hitbox_height,
+            hitbox_offset_y=hitbox_offset_y,
+            anchor_mode="center",
+        )
+        self.active_attack.owner_id = self.player_id
+        self.attack_frame = 0
+        self.state = "special"
+
+        attack.is_active = False
+        if hasattr(attack, "lifetime"):
+            attack.lifetime = 0
+        return True
 
     def handle_grab_hit(self, target, attack):
         if self.grabbed_target_id is not None or target.absorbed_by_id is not None:
@@ -846,6 +906,8 @@ class BaseCharacter:
         self.ultimate_cast_timer = 0
         self.casting_ultimate_id = None
         self.teleport_glow_color = None
+        self.parry_active_timer = 0
+        self.parry_recovery_timer = 0
         self._clear_grabbed_target()
 
     def die(self):
@@ -894,6 +956,8 @@ class BaseCharacter:
         self.teleport_glow_color = None
         self.invisible_timer = 0
         self.absorbed_by_id = None
+        self.parry_active_timer = 0
+        self.parry_recovery_timer = 0
 
     def consume_gameplay_events(self):
         events = list(self.gameplay_events)
@@ -904,7 +968,7 @@ class BaseCharacter:
         # Bepaal welke animatie afgespeeld wordt op basis van wat de character doet.
         if self.absorbed_by_id is not None:
             self.state = "idle"
-        elif self.ultimate_cast_timer > 0:
+        elif self.ultimate_cast_timer > 0 or self.parry_active_timer > 0:
             self.state = "special"
         elif not self.active_attack:
             just_landed = self.on_ground and not self.prev_on_ground
@@ -1104,12 +1168,32 @@ class BaseCharacter:
             preview_rect = self._get_teleport_preview_rect(camera_offset)
             if preview_rect:
                 pygame.draw.rect(screen, self.teleport_glow_color, preview_rect, 2, border_radius=10)
-        elif self.ultimate_cast_timer > 0 and self.teleport_glow_color:
+        elif (self.ultimate_cast_timer > 0 or self.parry_active_timer > 0) and self.teleport_glow_color:
             glow_rect = pygame.Rect(draw_x - 8, draw_y - 8, self.width + 16, self.height + 16)
             glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
             glow_surface.fill((*self.teleport_glow_color, 70))
             screen.blit(glow_surface, glow_rect.topleft)
             pygame.draw.rect(screen, self.teleport_glow_color, glow_rect, 2, border_radius=12)
+
+        if self.parry_active_timer > 0:
+            bubble_cfg = ULTIMATE_SHOP_INDEX["parry_counter"]
+            radius = max(bubble_cfg["counter_hitbox_width"], bubble_cfg["counter_hitbox_height"]) // 2
+            center = (int(draw_x + (self.width / 2)), int(draw_y + (self.height / 2)))
+            bubble_surface = pygame.Surface((radius * 2 + 8, radius * 2 + 8), pygame.SRCALPHA)
+            pygame.draw.circle(bubble_surface, (*bubble_cfg["glow_color"], 45), (radius + 4, radius + 4), radius)
+            pygame.draw.circle(bubble_surface, (*bubble_cfg["glow_color"], 170), (radius + 4, radius + 4), radius, 3)
+            screen.blit(bubble_surface, (center[0] - radius - 4, center[1] - radius - 4))
+
+        if self.active_attack and self.active_attack.name == "Parry Counter" and self.active_attack.is_active:
+            bubble_color = ULTIMATE_SHOP_INDEX["parry_counter"]["glow_color"]
+            hitbox = self.active_attack.hitbox
+            bubble_surface = pygame.Surface((int(hitbox.width) + 8, int(hitbox.height) + 8), pygame.SRCALPHA)
+            pygame.draw.ellipse(bubble_surface, (*bubble_color, 85), bubble_surface.get_rect())
+            pygame.draw.ellipse(bubble_surface, (*bubble_color, 210), bubble_surface.get_rect(), 4)
+            screen.blit(
+                bubble_surface,
+                (int(hitbox.x - camera_offset[0]) - 4, int(hitbox.y - camera_offset[1]) - 4),
+            )
 
         # Teken de actieve hitbox (rood kader, voor debugging)
         if self.active_attack and self.active_attack.is_active:
@@ -1162,6 +1246,8 @@ class BaseCharacter:
             "grabbed_target_id": self.grabbed_target_id,
             "grab_hold_timer": self.grab_hold_timer,
             "absorbed_by_id": self.absorbed_by_id,
+            "parry_active_timer": self.parry_active_timer,
+            "parry_recovery_timer": self.parry_recovery_timer,
             "active_attack": self.active_attack.to_dict() if self.active_attack else None,
             "active_ultimate_projectile": self.active_ultimate_projectile.to_dict() if self.active_ultimate_projectile else None,
         }
@@ -1203,6 +1289,8 @@ class BaseCharacter:
         self.grabbed_target_id = state.get("grabbed_target_id")
         self.grab_hold_timer = state.get("grab_hold_timer", 0)
         self.absorbed_by_id = state.get("absorbed_by_id")
+        self.parry_active_timer = state.get("parry_active_timer", 0)
+        self.parry_recovery_timer = state.get("parry_recovery_timer", 0)
         self._grabbed_target_ref = None
         if self.pending_ultimate_id == "teleportation":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["teleportation"].get("glow_color", Colors.CYAN)
@@ -1212,6 +1300,8 @@ class BaseCharacter:
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["invisibility"].get("glow_color", Colors.LIGHT_GRAY)
         elif self.casting_ultimate_id == "grab":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["grab"].get("glow_color", Colors.GREEN)
+        elif self.parry_active_timer > 0 or self.casting_ultimate_id == "parry_counter":
+            self.teleport_glow_color = ULTIMATE_SHOP_INDEX["parry_counter"].get("glow_color", Colors.CYAN)
         else:
             self.teleport_glow_color = None
 
