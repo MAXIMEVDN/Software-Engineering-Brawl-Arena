@@ -65,7 +65,7 @@ class Game:
         self.last_network_sync = 0.0
         self.network_sync_interval = 1.0 / max(1, NETWORK_TICK_RATE)
 
-        self.background = self._load_background("assets/backgrounds/background_purple.png")
+        self.background = self._load_background("assets/backgrounds/homepage background/Templebackground.jpg")
         self.mouse_capture_active = False
         self.pending_network_actions = {
             "jump": False,

@@ -1,7 +1,7 @@
 import pygame
 
 from config import ATTACK_SHOP_ITEMS, BUILD_STAT_NAMES, Colors, SCREEN_HEIGHT, SCREEN_WIDTH
-from ui.character_select import STAT_DISPLAY
+from ui.character_select import STAT_DISPLAY, _load_tinted_icon
 from ui.title_text import get_ui_font, render_fit_text
 
 
@@ -20,6 +20,7 @@ class StatUpgradeCard:
         self.bar_rect = pygame.Rect(x + 250, y + 28, self.plus_rect.left - (x + 250) - 16, 18)
         self.label_font = get_ui_font(22)
         self.small_font = get_ui_font(16)
+        self.icon = _load_tinted_icon(self.meta["icon"], self.meta["color"], size=40)
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -40,7 +41,10 @@ class StatUpgradeCard:
         pygame.draw.rect(screen, border_color, self.rect, 3 if selected else 2, border_radius=16)
 
         icon_rect = pygame.Rect(self.rect.left + 16, self.rect.top + 16, 40, 40)
-        pygame.draw.rect(screen, self.meta["color"], icon_rect, border_radius=12)
+        if self.icon:
+            screen.blit(self.icon, icon_rect)
+        else:
+            pygame.draw.rect(screen, self.meta["color"], icon_rect, border_radius=12)
 
         label = render_fit_text(self.meta["label"], Colors.WHITE, 150, 22, 14)
         screen.blit(label, (self.rect.left + 72, self.rect.top + 12))

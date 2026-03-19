@@ -1,3 +1,5 @@
+import os
+
 import pygame
 
 from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT, BUILD_STAT_NAMES, STAT_POINT_BUDGET
@@ -5,12 +7,54 @@ from ui.title_text import get_ui_font, render_fit_text
 
 
 STAT_DISPLAY = {
-    "power": {"label": "Power", "color": (218, 90, 90)},
-    "defense": {"label": "Defense", "color": (92, 178, 118)},
-    "mobility": {"label": "Mobility", "color": (98, 148, 226)},
-    "knockback": {"label": "Knockback", "color": (230, 168, 74)},
-    "range": {"label": "Range", "color": (180, 112, 220)},
+    "power": {"label": "Power", "color": (218, 90, 90), "icon": "power.png"},
+    "defense": {"label": "Defense", "color": (92, 178, 118), "icon": "defense.png"},
+    "mobility": {"label": "Mobility", "color": (98, 148, 226), "icon": "mobility.png"},
+    "knockback": {"label": "Knockback", "color": (230, 148, 68), "icon": "Knockback.png"},
+    "range": {"label": "Range", "color": (236, 208, 76), "icon": "range.png"},
 }
+
+ICON_DIR = os.path.join("assets", "Icons")
+
+
+def _resolve_asset_path(*parts):
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_dir, *parts)
+
+
+def _load_tinted_icon(icon_filename, target_color, size=48):
+    full_path = _resolve_asset_path(ICON_DIR, icon_filename)
+    if not os.path.exists(full_path):
+        return None
+
+    try:
+        icon = pygame.image.load(full_path).convert_alpha()
+    except pygame.error:
+        return None
+
+    tinted = pygame.Surface(icon.get_size(), pygame.SRCALPHA)
+    width, height = icon.get_size()
+
+    for x in range(width):
+        for y in range(height):
+            red, green, blue, alpha = icon.get_at((x, y))
+            if alpha == 0:
+                continue
+
+            if max(red, green, blue) <= 35:
+                tinted.set_at((x, y), (red, green, blue, alpha))
+                continue
+
+            brightness = max(0.45, min(1.15, ((red + green + blue) / (255 * 3)) * 1.35))
+            tinted_color = (
+                min(255, int(target_color[0] * brightness)),
+                min(255, int(target_color[1] * brightness)),
+                min(255, int(target_color[2] * brightness)),
+                alpha,
+            )
+            tinted.set_at((x, y), tinted_color)
+
+    return pygame.transform.scale(tinted, (size, size))
 
 
 class StatControl:
@@ -24,6 +68,7 @@ class StatControl:
         self.bar_rect = pygame.Rect(x + 380, y + 32, 370, 18)
         self.font = get_ui_font(24)
         self.small_font = get_ui_font(16)
+        self.icon = _load_tinted_icon(self.meta["icon"], self.meta["color"])
 
     def handle_event(self, event):
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
@@ -40,7 +85,10 @@ class StatControl:
         pygame.draw.rect(screen, border_color, self.rect, 3 if selected else 2, border_radius=14)
 
         icon_rect = pygame.Rect(self.rect.left + 20, self.rect.top + 16, 48, 48)
-        pygame.draw.rect(screen, self.meta["color"], icon_rect, border_radius=10)
+        if self.icon:
+            screen.blit(self.icon, icon_rect)
+        else:
+            pygame.draw.rect(screen, self.meta["color"], icon_rect, border_radius=10)
 
         label = render_fit_text(self.meta["label"], Colors.WHITE, 240, 24, 16)
         screen.blit(label, (self.rect.left + 98, self.rect.top + 14))
