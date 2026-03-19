@@ -18,6 +18,28 @@ from entities.attack import Attack, Projectile
 
 _SPRITE_RENDER_SIZE = 192  # Pixels to render each sprite frame (square)
 _shared_sprites = None    # Raw scaled frames, loaded once and shared per process
+_fireball_frames = None   # Animated GIF frames for the fireball projectile
+
+
+def _load_fireball_gif():
+    global _fireball_frames
+    if _fireball_frames is not None:
+        return
+    try:
+        from PIL import Image
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(root, "assets", "sprites", "attacks", "fireball_1.gif")
+        gif = Image.open(path)
+        frames = []
+        for i in range(gif.n_frames):
+            gif.seek(i)
+            frame_rgba = gif.convert("RGBA")
+            raw = frame_rgba.tobytes()
+            surface = pygame.image.fromstring(raw, frame_rgba.size, "RGBA").convert_alpha()
+            frames.append(surface)
+        _fireball_frames = frames
+    except Exception:
+        _fireball_frames = []
 
 # States whose animation plays once and holds on the last frame (no looping)
 _NON_LOOPING_STATES = frozenset({
@@ -25,6 +47,8 @@ _NON_LOOPING_STATES = frozenset({
     "landing", "landing_impact",
     "punch1", "kick", "special", "jump_strike",
     "crouch",
+    "ultimate_fireball", "ultimate_teleport", "ultimate_wind_power",
+    "ultimate_knockback", "ultimate_magic_shield",
 })
 
 # Tint colors per player — saturated so BLEND_MULT produces vivid hues
@@ -137,6 +161,10 @@ class BaseCharacter:
         self.pending_ultimate_id = None
         self.pending_ultimate_direction = None
         self.teleport_glow_color = None
+        self.teleport_anim_timer = 0
+        self.teleport_origin_x = 0
+        self.teleport_origin_y = 0
+        self.teleport_origin_timer = 0
         self.active_ultimate_projectile = None
         self.invisible_timer = 0
         self.grabbed_target_id = None
@@ -266,6 +294,8 @@ class BaseCharacter:
 
         if self.ultimate_cast_timer > 0:
             self._update_ultimate_cast()
+            if self.active_ultimate_projectile:
+                self._update_ultimate_projectile()
             self._update_animation_state()
             return
 
@@ -321,6 +351,10 @@ class BaseCharacter:
             self.dash_cooldown_timer -= 1
         if self.ultimate_cooldown_timer > 0:
             self.ultimate_cooldown_timer -= 1
+        if self.teleport_anim_timer > 0:
+            self.teleport_anim_timer -= 1
+        if self.teleport_origin_timer > 0:
+            self.teleport_origin_timer -= 1
         if self.invisible_timer > 0:
             self.invisible_timer -= 1
             if self.invisible_timer <= 0:
@@ -629,12 +663,18 @@ class BaseCharacter:
         self.is_dashing = False
         self.dash_frames = 0
         self.ultimate_cast_timer -= 1
+
+        fireball_cfg = ULTIMATE_SHOP_INDEX["fireball"]
+        launch_at = fireball_cfg.get("launch_at_remaining_frames", 0)
+        if self.casting_ultimate_id == "fireball" and self.ultimate_cast_timer == launch_at and self.active_ultimate_projectile is None:
+            self._launch_fireball()
+            self.ultimate_cooldown_timer = fireball_cfg["cooldown_frames"]
+
         if self.ultimate_cast_timer > 0:
             return
 
         if self.casting_ultimate_id == "fireball":
-            self._launch_fireball()
-            self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["fireball"]["cooldown_frames"]
+            pass  # already launched above
         elif self.casting_ultimate_id == "invisibility":
             self._activate_invisibility()
         elif self.casting_ultimate_id == "grab":
@@ -651,6 +691,9 @@ class BaseCharacter:
         distance = ultimate["distance"]
         direction = self.pending_ultimate_direction or ("right" if self.facing_right else "left")
 
+        self.teleport_origin_x = self.x
+        self.teleport_origin_y = self.y
+
         if direction == "up":
             self.y -= distance
         elif direction == "down":
@@ -661,6 +704,11 @@ class BaseCharacter:
         else:
             self.x += distance
             self.facing_right = True
+
+        anim_cfg = SPRITE_CONFIG["default"].get("ultimate_teleport", {})
+        speed = anim_cfg.get("animation_speed", 3)
+        self.teleport_anim_timer = 15 * speed
+        self.teleport_origin_timer = self.teleport_anim_timer
 
     def _launch_fireball(self):
         ultimate = ULTIMATE_SHOP_INDEX["fireball"]
@@ -969,7 +1017,17 @@ class BaseCharacter:
         if self.absorbed_by_id is not None:
             self.state = "idle"
         elif self.ultimate_cast_timer > 0 or self.parry_active_timer > 0:
-            self.state = "special"
+            uid = self.casting_ultimate_id
+            if uid == "fireball":
+                self.state = "ultimate_fireball"
+            elif uid == "invisibility":
+                self.state = "ultimate_wind_power"
+            elif uid == "grab":
+                self.state = "ultimate_knockback"
+            else:
+                self.state = "ultimate_magic_shield"
+        elif self.teleport_anim_timer > 0:
+            self.state = "ultimate_teleport"
         elif not self.active_attack:
             just_landed = self.on_ground and not self.prev_on_ground
 
@@ -1141,10 +1199,11 @@ class BaseCharacter:
                 size = _SPRITE_RENDER_SIZE
                 anim_cfg = SPRITE_CONFIG.get("default", {}).get(self.state, {})
                 raw_offset = anim_cfg.get("render_offset_x", 0)
+                raw_offset_y = anim_cfg.get("render_offset_y", 0)
                 scale = size / anim_cfg.get("frame_width", 128)
                 direction = 1 if self.facing_right else -1
                 sprite_x = draw_x + (self.width - size) // 2 + int(raw_offset * scale * direction)
-                sprite_y = draw_y + self.height - size
+                sprite_y = draw_y + self.height - size + int(raw_offset_y * scale)
 
                 # Outline: donkere silhouet in spelerkleur, 4 richtingen 2px verschoven
                 outline_anim = self.outline_sprites.get(self.state) or self.outline_sprites.get("idle")
@@ -1154,6 +1213,14 @@ class BaseCharacter:
                         screen.blit(outline_frame, (sprite_x + ox, sprite_y + oy))
 
                 screen.blit(frame, (sprite_x, sprite_y))
+
+                if self.teleport_origin_timer > 0:
+                    origin_sx = self.teleport_origin_x - camera_offset[0] + (self.width - size) // 2 + int(raw_offset * scale * direction)
+                    origin_sy = self.teleport_origin_y - camera_offset[1] + self.height - size + int(raw_offset_y * scale)
+                    alpha = int(255 * self.teleport_origin_timer / max(self.teleport_anim_timer, 1))
+                    ghost = frame.copy()
+                    ghost.set_alpha(alpha)
+                    screen.blit(ghost, (origin_sx, origin_sy))
         else:
             pygame.draw.rect(screen, self.color, (draw_x, draw_y, self.width, self.height))
             indicator_x = draw_x + (self.width - 10) if self.facing_right else draw_x
@@ -1175,25 +1242,6 @@ class BaseCharacter:
             screen.blit(glow_surface, glow_rect.topleft)
             pygame.draw.rect(screen, self.teleport_glow_color, glow_rect, 2, border_radius=12)
 
-        if self.parry_active_timer > 0:
-            bubble_cfg = ULTIMATE_SHOP_INDEX["parry_counter"]
-            radius = max(bubble_cfg["counter_hitbox_width"], bubble_cfg["counter_hitbox_height"]) // 2
-            center = (int(draw_x + (self.width / 2)), int(draw_y + (self.height / 2)))
-            bubble_surface = pygame.Surface((radius * 2 + 8, radius * 2 + 8), pygame.SRCALPHA)
-            pygame.draw.circle(bubble_surface, (*bubble_cfg["glow_color"], 45), (radius + 4, radius + 4), radius)
-            pygame.draw.circle(bubble_surface, (*bubble_cfg["glow_color"], 170), (radius + 4, radius + 4), radius, 3)
-            screen.blit(bubble_surface, (center[0] - radius - 4, center[1] - radius - 4))
-
-        if self.active_attack and self.active_attack.name == "Parry Counter" and self.active_attack.is_active:
-            bubble_color = ULTIMATE_SHOP_INDEX["parry_counter"]["glow_color"]
-            hitbox = self.active_attack.hitbox
-            bubble_surface = pygame.Surface((int(hitbox.width) + 8, int(hitbox.height) + 8), pygame.SRCALPHA)
-            pygame.draw.ellipse(bubble_surface, (*bubble_color, 85), bubble_surface.get_rect())
-            pygame.draw.ellipse(bubble_surface, (*bubble_color, 210), bubble_surface.get_rect(), 4)
-            screen.blit(
-                bubble_surface,
-                (int(hitbox.x - camera_offset[0]) - 4, int(hitbox.y - camera_offset[1]) - 4),
-            )
 
         # Teken de actieve hitbox (rood kader, voor debugging)
         if self.active_attack and self.active_attack.is_active:
@@ -1204,10 +1252,26 @@ class BaseCharacter:
                               hitbox.width, hitbox.height), 2)
         if self.active_ultimate_projectile and self.active_ultimate_projectile.is_active:
             hitbox = self.active_ultimate_projectile.hitbox
-            pygame.draw.rect(screen, (255, 140, 0),
-                             (hitbox.x - camera_offset[0],
-                              hitbox.y - camera_offset[1],
-                              hitbox.width, hitbox.height), 2)
+            _load_fireball_gif()
+            if _fireball_frames:
+                proj = self.active_ultimate_projectile
+                elapsed = ULTIMATE_SHOP_INDEX["fireball"]["projectile_lifetime"] - proj.lifetime
+                frame_idx = (elapsed // 4) % len(_fireball_frames)
+                gif_frame = _fireball_frames[frame_idx]
+                size = max(hitbox.width, hitbox.height) * 2
+                scaled = pygame.transform.scale(gif_frame, (size, size))
+                if not self.active_ultimate_projectile.vel_x > 0:
+                    scaled = pygame.transform.flip(scaled, True, False)
+                draw_rect = scaled.get_rect(center=(
+                    int(hitbox.x + hitbox.width / 2 - camera_offset[0]),
+                    int(hitbox.y + hitbox.height / 2 - camera_offset[1]),
+                ))
+                screen.blit(scaled, draw_rect)
+            else:
+                pygame.draw.rect(screen, (255, 140, 0),
+                                 (hitbox.x - camera_offset[0],
+                                  hitbox.y - camera_offset[1],
+                                  hitbox.width, hitbox.height), 2)
 
     def get_state(self):
         # Zet de character-state om naar een dictionary (voor netwerkverzending).
@@ -1242,6 +1306,10 @@ class BaseCharacter:
             "casting_ultimate_id": self.casting_ultimate_id,
             "pending_ultimate_id": self.pending_ultimate_id,
             "pending_ultimate_direction": self.pending_ultimate_direction,
+            "teleport_anim_timer": self.teleport_anim_timer,
+            "teleport_origin_x": self.teleport_origin_x,
+            "teleport_origin_y": self.teleport_origin_y,
+            "teleport_origin_timer": self.teleport_origin_timer,
             "invisible_timer": self.invisible_timer,
             "grabbed_target_id": self.grabbed_target_id,
             "grab_hold_timer": self.grab_hold_timer,
@@ -1285,6 +1353,10 @@ class BaseCharacter:
         self.casting_ultimate_id = state.get("casting_ultimate_id")
         self.pending_ultimate_id = state.get("pending_ultimate_id")
         self.pending_ultimate_direction = state.get("pending_ultimate_direction")
+        self.teleport_anim_timer = state.get("teleport_anim_timer", 0)
+        self.teleport_origin_x = state.get("teleport_origin_x", 0)
+        self.teleport_origin_y = state.get("teleport_origin_y", 0)
+        self.teleport_origin_timer = state.get("teleport_origin_timer", 0)
         self.invisible_timer = state.get("invisible_timer", 0)
         self.grabbed_target_id = state.get("grabbed_target_id")
         self.grab_hold_timer = state.get("grab_hold_timer", 0)

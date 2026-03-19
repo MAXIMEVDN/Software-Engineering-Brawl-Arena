@@ -283,6 +283,48 @@ SPRITE_CONFIG = {
             "frame_height": 128,
             "animation_speed": 3,
         },
+        # Ultimate animations
+        "ultimate_fireball": {
+            "file": "Fire_Kick.png",
+            "folder": "attacks",
+            "frames": 11,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+        },
+        "ultimate_teleport": {
+            "file": "Teleport.png",
+            "folder": "attacks",
+            "frames": 17,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+            "render_offset_y": 20,
+        },
+        "ultimate_wind_power": {
+            "file": "Wind_Power.png",
+            "folder": "attacks",
+            "frames": 6,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+        },
+        "ultimate_knockback": {
+            "file": "Knockback.png",
+            "folder": "attacks",
+            "frames": 8,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+        },
+        "ultimate_magic_shield": {
+            "file": "Magic_Shield.png",
+            "folder": "attacks",
+            "frames": 12,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+        },
     }
 }
 
@@ -334,7 +376,7 @@ ULTIMATE_SHOP_ITEMS = [
         "cost": 8,
         "focus": "Projectile",
         "description": "Cast a fast fireball straight ahead that bursts on first hit.",
-        "cast_frames": 8,
+        "cast_frames": 33,
         "cooldown_frames": 6 * FPS,
         "damage": 16,
         "knockback_base": 6.0,
@@ -345,7 +387,8 @@ ULTIMATE_SHOP_ITEMS = [
         "hitbox_width": 46,
         "hitbox_height": 30,
         "spawn_offset_x": 20,
-        "spawn_offset_y": 14,
+        "spawn_offset_y": -15,
+        "launch_at_remaining_frames": 22,
         "glow_color": (255, 130, 40),
     },
     {
