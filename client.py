@@ -47,6 +47,7 @@ class Game:
         self.server_process = None
         self.host_ip = ""
         self.is_local = False
+        self.username = ""
 
         self.game_state = GameState()
         self.local_player_id = None
@@ -146,6 +147,7 @@ class Game:
             return
 
         action = result.get("action")
+        self.username = result.get("username", "").strip()
         if action == "host":
             self._start_host()
         elif action == "join":
@@ -376,6 +378,10 @@ class Game:
         for character in self._get_all_characters():
             character.draw(self.screen, self.camera_offset, self.local_player_id)
 
+        self.hud.draw_in_world_usernames(
+            self.game_state.get_connected_players(),
+            self.camera_offset,
+        )
         self.hud.draw(self._get_all_characters(), self.local_player_id or 0, self.game_state)
 
     def _render_upgrade_shop(self):
@@ -407,7 +413,12 @@ class Game:
                 if winner_player and winner_player.character
                 else Colors.GRAY
             )
-            self.hud.draw_winner(f"Player {winner_id + 1}", winner_color)
+            winner_name = (
+                winner_player.username
+                if winner_player and winner_player.username
+                else f"Player {winner_id + 1}"
+            )
+            self.hud.draw_winner(winner_name, winner_color)
         else:
             self.hud.draw_winner("DRAW", Colors.GRAY)
 
@@ -419,6 +430,7 @@ class Game:
         self.is_local = True
         self.local_player_id = 0
         self.game_state.add_player(0)
+        self.game_state.set_player_username(0, self.username or "Player 1")
         self.game_state.start_stat_selection()
         self.stat_select.reset()
         self.state = "stat_select"
@@ -486,7 +498,7 @@ class Game:
 
         for _ in range(12):
             self.network = Network("127.0.0.1")
-            if self.network.connect():
+            if self.network.connect(self.username):
                 self.local_player_id = self.network.get_player_id()
                 self.menu.set_waiting_view(1, self.host_ip)
                 self._sync_with_server(force=True)
@@ -498,7 +510,7 @@ class Game:
 
     def _join_lobby(self, ip):
         self.network = Network(ip)
-        if self.network.connect():
+        if self.network.connect(self.username):
             self.local_player_id = self.network.get_player_id()
             self.menu.set_waiting_view(len(self.game_state.get_connected_players()), ip)
             self._sync_with_server(force=True)
