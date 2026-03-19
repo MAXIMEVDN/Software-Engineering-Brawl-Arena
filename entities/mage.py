@@ -39,7 +39,7 @@ class Mage(BaseCharacter):
             hitbox_width=30,
             hitbox_height=20,
             hitbox_offset_x=40,  # Ver voor de character
-            hitbox_offset_y=20,
+            hitbox_offset_y=5,
         )
 
     def heavy_attack(self):

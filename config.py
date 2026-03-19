@@ -93,7 +93,7 @@ class AttackData:
         "recovery_frames": 8,
         "range": 50,
         "width": 40,
-        "height": 30,
+        "height": 22,
     }
     
     HEAVY = {
@@ -250,17 +250,35 @@ SPRITE_CONFIG = {
             "animation_speed": 3,
         },
         "kick": {
-            "file": "Ground_Slam.png",
+            "file": "Power_Strike.png",
             "folder": "attacks",
-            "frames": 12,
+            "frames": 11,
             "frame_width": 128,
             "frame_height": 128,
             "animation_speed": 3,
+            "render_offset_x": 33,  # Karakter staat ~33px links in het sprite sheet t.o.v. idle
         },
         "special": {
-            "file": "Fire_Kick.png",
+            "file": "Kick.png",
             "folder": "attacks",
-            "frames": 11,
+            "frames": 5,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 3,
+            "penultimate_hold": 10,  # Extra frames vasthouden op de trappose (frame 3)
+        },
+        # Crouch (S / Arrow Down op de grond)
+        "crouch": {
+            "file": "Crouch.png",
+            "frames": 3,
+            "frame_width": 128,
+            "frame_height": 128,
+            "animation_speed": 5,
+        },
+        # Light attack in de lucht
+        "jump_strike": {
+            "file": "Jump witn Strike.png",
+            "frames": 3,
             "frame_width": 128,
             "frame_height": 128,
             "animation_speed": 3,
@@ -314,9 +332,9 @@ ATTACK_SHOP_ITEMS = [
         "active_frames": 4,
         "recovery_frames": 8,
         "hitbox_width": 72,
-        "hitbox_height": 24,
+        "hitbox_height": 22,
         "hitbox_offset_x": 14,
-        "hitbox_offset_y": 18,
+        "hitbox_offset_y": 5,
     },
     {
         "id": "crusher_elbow",
@@ -333,9 +351,9 @@ ATTACK_SHOP_ITEMS = [
         "active_frames": 3,
         "recovery_frames": 10,
         "hitbox_width": 44,
-        "hitbox_height": 30,
+        "hitbox_height": 22,
         "hitbox_offset_x": 6,
-        "hitbox_offset_y": 16,
+        "hitbox_offset_y": 5,
     },
     {
         "id": "sweep_lunge",

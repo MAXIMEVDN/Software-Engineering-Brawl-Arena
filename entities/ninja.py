@@ -45,9 +45,9 @@ class Ninja(BaseCharacter):
             active_frames=AttackData.LIGHT["active_frames"] - 1,
             recovery_frames=AttackData.LIGHT["recovery_frames"] - 3,
             hitbox_width=35,
-            hitbox_height=25,
+            hitbox_height=22,
             hitbox_offset_x=5,
-            hitbox_offset_y=15,
+            hitbox_offset_y=5,
         )
 
     def heavy_attack(self):

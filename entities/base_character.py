@@ -22,7 +22,8 @@ _shared_sprites = None    # Raw scaled frames, loaded once and shared per proces
 _NON_LOOPING_STATES = frozenset({
     "jump_stationary", "jump_moving", "double_jump",
     "landing", "landing_impact",
-    "punch1", "kick", "special",
+    "punch1", "kick", "special", "jump_strike",
+    "crouch",
 })
 
 # Tint colors per player — saturated so BLEND_MULT produces vivid hues
@@ -84,6 +85,7 @@ class BaseCharacter:
         self.is_dashing = False
         self.dash_frames = 0
         self.dash_cooldown_timer = 0
+        self.is_crouching = False
 
         # Animatiestatus
         self.state = "idle"
@@ -317,11 +319,14 @@ class BaseCharacter:
             self.die()
 
     def handle_input(self, keys):
-        # Verwerk ingedrukte toetsen (voor beweging links/rechts).
+        # Verwerk ingedrukte toetsen (voor beweging links/rechts en crouch).
         if self.hitstun > 0:
             return None
 
-        if not self.active_attack:
+        crouching = self.on_ground and any(keys[k] for k in CONTROLS["down"])
+        self.is_crouching = crouching
+
+        if not self.active_attack and not crouching:
             if any(keys[k] for k in CONTROLS["left"]):
                 self.move_left()
             elif any(keys[k] for k in CONTROLS["right"]):
@@ -417,7 +422,7 @@ class BaseCharacter:
         # Roep de juiste methode aan — dit is polymorfisme in actie!
         if attack_type == "light":
             self.active_attack = self.light_attack()
-            self.state = "punch1"
+            self.state = "jump_strike" if not self.on_ground else "punch1"
         elif attack_type == "heavy":
             self.active_attack = self.heavy_attack()
             self.state = "kick"
@@ -568,6 +573,7 @@ class BaseCharacter:
                 self.state = "dash"
 
             elif not self.on_ground:
+                self.is_crouching = False
                 # Eigen sprong — type werd ingesteld in jump()
                 if self.jump_type == "double":
                     self.state = "double_jump"
@@ -578,11 +584,13 @@ class BaseCharacter:
 
             else:
                 # Op de grond, geen hitstun, niet aan het dashen
-                if just_landed and self.state in ("jump_stationary", "jump_moving", "double_jump"):
+                if just_landed and self.state in ("jump_stationary", "jump_moving", "double_jump", "jump_strike"):
                     # Normale landing na eigen sprong
                     self.state = "landing"
                     self.landing_timer = 0
                     self.jump_type = "stationary"  # reset voor volgende sprong
+                elif self.is_crouching:
+                    self.state = "crouch"
                 elif abs(self.vel_x) > 0.5:
                     mobility = self.build_stats["mobility"]
                     if mobility >= STAT_POINT_BUDGET * 2 / 3:
@@ -609,13 +617,30 @@ class BaseCharacter:
         speed = config.get("animation_speed", 5)
 
         if self.state in _NON_LOOPING_STATES:
-            # Niet-lopende animaties: vasthouden op het laatste frame
-            self.animation_frame = min(self.animation_timer // speed, num_frames - 1)
+            penultimate_hold = config.get("penultimate_hold", 0)
+            if penultimate_hold > 0 and num_frames >= 2:
+                # Alle frames t/m een-na-laatste lopen normaal;
+                # daarna extra hold op een-na-laatste, dan pas het laatste frame.
+                normal_time = (num_frames - 2) * speed
+                penultimate_time = speed + penultimate_hold
+                if self.animation_timer < normal_time:
+                    self.animation_frame = self.animation_timer // speed
+                elif self.animation_timer < normal_time + penultimate_time:
+                    self.animation_frame = num_frames - 2
+                else:
+                    self.animation_frame = num_frames - 1
+            else:
+                # Niet-lopende animaties: vasthouden op het laatste frame
+                self.animation_frame = min(self.animation_timer // speed, num_frames - 1)
         else:
             self.animation_frame = (self.animation_timer // speed) % num_frames
 
     def get_rect(self):
         # Geef de collision-rechthoek van de character terug.
+        # Bij crouch alleen de onderste helft (om light attacks te ontwijken).
+        if self.is_crouching:
+            crouch_height = self.height // 2
+            return pygame.Rect(self.x, self.y + crouch_height, self.width, crouch_height)
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def _load_sprites(self):
@@ -665,7 +690,11 @@ class BaseCharacter:
             frame = self._get_current_sprite_frame()
             if frame:
                 size = _SPRITE_RENDER_SIZE
-                sprite_x = draw_x + (self.width - size) // 2
+                anim_cfg = SPRITE_CONFIG.get("default", {}).get(self.state, {})
+                raw_offset = anim_cfg.get("render_offset_x", 0)
+                scale = size / anim_cfg.get("frame_width", 128)
+                direction = 1 if self.facing_right else -1
+                sprite_x = draw_x + (self.width - size) // 2 + int(raw_offset * scale * direction)
                 sprite_y = draw_y + self.height - size
                 screen.blit(frame, (sprite_x, sprite_y))
         else:

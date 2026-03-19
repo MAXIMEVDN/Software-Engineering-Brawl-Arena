@@ -66,7 +66,7 @@ class Warrior(BaseCharacter):
             hitbox_width=AttackData.LIGHT["width"],
             hitbox_height=AttackData.LIGHT["height"],
             hitbox_offset_x=5,
-            hitbox_offset_y=15,
+            hitbox_offset_y=5,
         )
 
     def heavy_attack(self):
