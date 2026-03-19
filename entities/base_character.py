@@ -44,6 +44,17 @@ def _apply_tint(surface, tint_color):
     return tinted
 
 
+def _make_silhouette(surface, outline_color):
+    # Zet alle zichtbare pixels om naar outline_color, alpha blijft behouden.
+    sil = surface.copy()
+    sil.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGBA_MIN)  # RGB → 0, alpha intact
+    sil.fill((*outline_color, 0), special_flags=pygame.BLEND_RGBA_ADD)  # kleur toevoegen
+    return sil
+
+
+_OUTLINE_OFFSETS = ((0, -2), (0, 2), (-2, 0), (2, 0))
+
+
 class BaseCharacter:
     # Basisklasse voor alle characters.
     # Bevat beweging, physics, gevecht en netwerk-synchronisatie.
@@ -106,6 +117,7 @@ class BaseCharacter:
         # Kleur (voor het tekenen)
         self.color = Colors.PLAYER_COLORS[player_id % len(Colors.PLAYER_COLORS)]
         self.sprites = {}
+        self.outline_sprites = {}
         self.sprites_loaded = False
         self._prev_state = "idle"
 
@@ -892,11 +904,17 @@ class BaseCharacter:
         # Apply player-specific color tint and pre-cache both directions so we
         # never call transform.flip() in the hot draw path.
         tint = _PLAYER_TINT_COLORS[self.player_id % len(_PLAYER_TINT_COLORS)]
+        outline_color = tuple(max(10, int(c * 0.35)) for c in tint)
         self.sprites = {}
+        self.outline_sprites = {}
         for anim_name, frames in _shared_sprites.items():
             tinted = [_apply_tint(f, tint) for f in frames]
             flipped = [pygame.transform.flip(f, True, False) for f in tinted]
             self.sprites[anim_name] = {True: tinted, False: flipped}
+
+            outlined = [_make_silhouette(f, outline_color) for f in frames]
+            outlined_flipped = [pygame.transform.flip(f, True, False) for f in outlined]
+            self.outline_sprites[anim_name] = {True: outlined, False: outlined_flipped}
         self.sprites_loaded = True
 
     def _get_current_sprite_frame(self):
@@ -932,6 +950,14 @@ class BaseCharacter:
                 direction = 1 if self.facing_right else -1
                 sprite_x = draw_x + (self.width - size) // 2 + int(raw_offset * scale * direction)
                 sprite_y = draw_y + self.height - size
+
+                # Outline: donkere silhouet in spelerkleur, 4 richtingen 2px verschoven
+                outline_anim = self.outline_sprites.get(self.state) or self.outline_sprites.get("idle")
+                if outline_anim:
+                    outline_frame = outline_anim[self.facing_right][self.animation_frame % len(outline_anim[self.facing_right])]
+                    for ox, oy in _OUTLINE_OFFSETS:
+                        screen.blit(outline_frame, (sprite_x + ox, sprite_y + oy))
+
                 screen.blit(frame, (sprite_x, sprite_y))
         else:
             pygame.draw.rect(screen, self.color, (draw_x, draw_y, self.width, self.height))

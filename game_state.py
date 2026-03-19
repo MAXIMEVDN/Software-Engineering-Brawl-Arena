@@ -48,6 +48,7 @@ class PlayerData:
     owned_ultimate_ids: List[str] = None
     equipped_ultimate_id: Optional[str] = None
     round_stat_upgrades: Dict[str, int] = None
+    username: str = ""
 
     def __post_init__(self):
         if self.build_stats is None:
@@ -520,6 +521,11 @@ class GameState:
     def get_player(self, player_id: int) -> Optional[PlayerData]:
         return self.players.get(player_id)
 
+    def set_player_username(self, player_id: int, username: str) -> None:
+        player = self.players.get(player_id)
+        if player:
+            player.username = username[:20]
+
     def get_stat_select_seconds_remaining(self) -> int:
         return max(0, (self.stat_select_remaining_frames + FPS - 1) // FPS)
 
@@ -553,6 +559,7 @@ class GameState:
                     "owned_ultimate_ids": list(player.owned_ultimate_ids),
                     "equipped_ultimate_id": player.equipped_ultimate_id,
                     "round_stat_upgrades": dict(player.round_stat_upgrades),
+                    "username": player.username,
                     "character_state": player.character.get_state() if player.character else None,
                 }
                 for pid, player in self.players.items()
@@ -599,6 +606,7 @@ class GameState:
             player.equipped_ultimate_id = pdata.get("equipped_ultimate_id")
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
             player.round_stat_upgrades.update(pdata.get("round_stat_upgrades", {}))
+            player.username = pdata.get("username", "")
 
             if pdata["character_state"]:
                 if player.character is None:

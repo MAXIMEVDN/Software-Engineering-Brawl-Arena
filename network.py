@@ -24,10 +24,10 @@ class Network:
         self.connected = False
         self._lock = threading.Lock()
 
-    def connect(self) -> bool:
+    def connect(self, username: str = "") -> bool:
         try:
             self.client.connect(self.addr)
-            self.client.sendall(pickle.dumps({"type": "join_lobby", "data": {}}))
+            self.client.sendall(pickle.dumps({"type": "join_lobby", "username": username, "data": {}}))
 
             data = self.client.recv(BUFFER_SIZE)
             response = pickle.loads(data)

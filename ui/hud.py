@@ -154,6 +154,20 @@ class HUD:
         hint = self.font_small.render("Press R when ready to start", True, Colors.GRAY)
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 80)))
 
+    def draw_in_world_usernames(self, players, camera_offset=(0, 0)):
+        for player in players:
+            if not player.character or not player.connected:
+                continue
+            char = player.character
+            label = player.username or f"P{char.player_id + 1}"
+            surface = self.font_small.render(label, True, char.color)
+            # Schaduw voor leesbaarheid
+            shadow = self.font_small.render(label, True, (0, 0, 0))
+            cx = int(char.x + char.width / 2 - camera_offset[0])
+            cy = int(char.y - 70 - camera_offset[1])
+            self.screen.blit(shadow, shadow.get_rect(center=(cx + 1, cy + 1)))
+            self.screen.blit(surface, surface.get_rect(center=(cx, cy)))
+
     def draw_center_announcement(self, text, size=96):
         draw_title_style_text(
             self.screen,

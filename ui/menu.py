@@ -88,6 +88,7 @@ class MainMenu:
         self.body_font = get_ui_font(28)
         self.small_font = get_ui_font(22)
 
+        self.username_input = TextInput(SCREEN_WIDTH // 2, 272, 280, 44, "Username", font_size=26)
         self.join_ip_input = TextInput(SCREEN_WIDTH // 2, 360, 360, 48, "Host IP (bijv. 192.168.1.42)")
         self.background = self._load_background(self.MENU_BG_PATH)
         self.title_image = self._load_title_image()
@@ -250,17 +251,17 @@ class MainMenu:
         self._update_selection_state()
 
     def _on_create_lobby(self):
-        self.result = {"action": "host"}
+        self.result = {"action": "host", "username": self.username_input.text.strip()}
 
     def _on_join_lobby(self):
         ip = self.join_ip_input.text.strip()
         if not ip:
             self.error_message = "Voer het host IP in."
             return
-        self.result = {"action": "join", "ip": ip}
+        self.result = {"action": "join", "ip": ip, "username": self.username_input.text.strip()}
 
     def _on_local_game(self):
-        self.result = {"action": "local"}
+        self.result = {"action": "local", "username": self.username_input.text.strip()}
 
     def _on_cancel_waiting(self):
         self.result = {"action": "cancel_waiting"}
@@ -295,18 +296,21 @@ class MainMenu:
                 self.selected_index = 0
                 self._update_selection_state()
         elif self.state == "mode_select":
-            if self._handle_keyboard_navigation(event, len(self.mode_buttons)):
+            self.username_input.handle_event(event)
+            if not self.username_input.active and self._handle_keyboard_navigation(event, len(self.mode_buttons)):
                 return
             for button in self.mode_buttons:
                 button.handle_event(event)
         elif self.state == "host_setup":
-            if self._handle_keyboard_navigation(event, len(self.host_buttons)):
+            self.username_input.handle_event(event)
+            if not self.username_input.active and self._handle_keyboard_navigation(event, len(self.host_buttons)):
                 return
             for button in self.host_buttons:
                 button.handle_event(event)
         elif self.state == "join_setup":
+            self.username_input.handle_event(event)
             self.join_ip_input.handle_event(event)
-            if self._handle_join_keyboard_navigation(event):
+            if not self.username_input.active and not self.join_ip_input.active and self._handle_join_keyboard_navigation(event):
                 return
             for button in self.join_buttons:
                 button.handle_event(event)
@@ -486,23 +490,29 @@ class MainMenu:
     def _draw_mode_select(self):
         subtitle = self.subtitle_font.render("Kies hoe je de lobby wilt openen", True, self.TITLE_ACCENT_COLOR)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 220)))
+        self._draw_username_field()
         for button in self.mode_buttons:
             button.draw(self.screen)
 
     def _draw_host_setup(self):
         label = self.subtitle_font.render("Start een host lobby", True, Colors.WHITE)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
+        self._draw_username_field()
         hint = self.small_font.render("Deel daarna alleen jouw IP met de andere speler.", True, Colors.GRAY)
-        self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 312)))
+        self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 330)))
         for button in self.host_buttons:
             button.draw(self.screen)
 
     def _draw_join_setup(self):
         label = self.subtitle_font.render("Join met host IP", True, Colors.WHITE)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
+        self._draw_username_field()
         self.join_ip_input.draw(self.screen)
         for button in self.join_buttons:
             button.draw(self.screen)
+
+    def _draw_username_field(self):
+        self.username_input.draw(self.screen)
 
     def _draw_host_waiting(self):
         label = self.subtitle_font.render("Lobby geopend", True, Colors.WHITE)

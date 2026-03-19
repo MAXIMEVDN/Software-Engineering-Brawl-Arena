@@ -143,6 +143,10 @@ class GameServer:
                     conn.sendall(pickle.dumps({"ok": False, "error": "Lobby zit vol"}))
                     return None
 
+                username = str(message.get("username", "")).strip()
+                if username:
+                    self.game_state.set_player_username(player_id, username)
+
                 if self.game_state.active_player_count() >= 2:
                     self.game_state.start_stat_selection()
 
