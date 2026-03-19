@@ -13,7 +13,7 @@ from config import (
     STAT_POINT_BUDGET,
     ULTIMATE_SHOP_INDEX,
 )
-from entities.attack import Attack
+from entities.attack import Attack, Projectile
 
 
 _SPRITE_RENDER_SIZE = 192  # Pixels to render each sprite frame (square)
@@ -120,9 +120,12 @@ class BaseCharacter:
         self.equipped_ultimate_id = None
         self.ultimate_cooldown_timer = 0
         self.ultimate_preview_active = False
+        self.ultimate_cast_timer = 0
+        self.casting_ultimate_id = None
         self.pending_ultimate_id = None
         self.pending_ultimate_direction = None
         self.teleport_glow_color = None
+        self.active_ultimate_projectile = None
 
     def light_attack(self):
         # Geeft een Attack-object terug voor de lichte aanval.
@@ -234,6 +237,11 @@ class BaseCharacter:
         # Update alles voor één frame: timers, physics, collision, aanval, animatie.
         self._update_timers()
 
+        if self.ultimate_cast_timer > 0:
+            self._update_ultimate_cast()
+            self._update_animation_state()
+            return
+
         if self.hitstun <= 0:
             self._apply_gravity()
             self._apply_friction()
@@ -246,6 +254,8 @@ class BaseCharacter:
 
         if self.active_attack:
             self._update_attack()
+        if self.active_ultimate_projectile:
+            self._update_ultimate_projectile()
 
         self._update_animation_state()
 
@@ -325,7 +335,7 @@ class BaseCharacter:
 
     def handle_input(self, keys):
         # Verwerk ingedrukte toetsen (voor beweging links/rechts en crouch).
-        if self.hitstun > 0:
+        if self.hitstun > 0 or self.ultimate_cast_timer > 0:
             return None
 
         crouching = self.on_ground and any(keys[k] for k in CONTROLS["down"])
@@ -348,9 +358,13 @@ class BaseCharacter:
             return None
 
         if key in CONTROLS["ultimate_ability"]:
-            return self.start_ultimate_preview(self._get_direction_from_keys(pygame.key.get_pressed()))
+            if self.equipped_ultimate_id == "teleportation":
+                return self.start_ultimate_preview(self._get_direction_from_keys(pygame.key.get_pressed()))
+            return self.activate_ultimate()
 
         if self.ultimate_preview_active:
+            return None
+        if self.ultimate_cast_timer > 0:
             return None
 
         if key in CONTROLS["jump"]:
@@ -379,12 +393,20 @@ class BaseCharacter:
         if self.hitstun > 0:
             return
 
+        if input_state.get("ultimate_trigger"):
+            if self.equipped_ultimate_id == "teleportation":
+                self.start_ultimate_preview(self._get_direction_from_input_state(input_state))
+            else:
+                self.activate_ultimate()
         if input_state.get("ultimate_release"):
             self.release_ultimate()
         elif input_state.get("ultimate_preview"):
             self.start_ultimate_preview(self._get_direction_from_input_state(input_state))
         elif self.ultimate_preview_active:
             self.cancel_ultimate_preview()
+
+        if self.ultimate_cast_timer > 0:
+            return
 
         if not self.active_attack:
             if input_state.get("left"):
@@ -442,7 +464,7 @@ class BaseCharacter:
 
     def start_attack(self, attack_type):
         # Start een aanval van het opgegeven type ("light", "heavy" of "special").
-        if self.active_attack or self.attack_cooldown > 0 or self.ultimate_preview_active:
+        if self.active_attack or self.attack_cooldown > 0 or self.ultimate_preview_active or self.ultimate_cast_timer > 0:
             return None
 
         # Roep de juiste methode aan — dit is polymorfisme in actie!
@@ -487,7 +509,7 @@ class BaseCharacter:
         if self.ultimate_preview_active:
             self.pending_ultimate_direction = direction or self.pending_ultimate_direction
             return True
-        if self.active_attack or self.attack_cooldown > 0:
+        if self.active_attack or self.attack_cooldown > 0 or self.ultimate_cast_timer > 0:
             return False
         if self.equipped_ultimate_id != "teleportation":
             return False
@@ -506,6 +528,26 @@ class BaseCharacter:
         self.pending_ultimate_direction = None
         self.teleport_glow_color = None
 
+    def activate_ultimate(self):
+        if self.ultimate_preview_active or self.ultimate_cast_timer > 0:
+            return False
+        if self.active_attack or self.attack_cooldown > 0:
+            return False
+        if self.equipped_ultimate_id != "fireball":
+            return False
+        if self.ultimate_cooldown_timer > 0:
+            return False
+
+        ultimate = ULTIMATE_SHOP_INDEX["fireball"]
+        self.ultimate_cast_timer = ultimate["cast_frames"]
+        self.casting_ultimate_id = "fireball"
+        self.teleport_glow_color = ultimate.get("glow_color", Colors.ORANGE)
+        self.vel_x = 0
+        self.vel_y = 0
+        self.is_dashing = False
+        self.dash_frames = 0
+        return True
+
     def release_ultimate(self):
         if not self.ultimate_preview_active or self.pending_ultimate_id != "teleportation":
             return False
@@ -518,6 +560,26 @@ class BaseCharacter:
         self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["teleportation"]["cooldown_frames"]
         self.cancel_ultimate_preview()
         return True
+
+    def _update_ultimate_cast(self):
+        if self.ultimate_cast_timer <= 0:
+            return
+
+        self.vel_x = 0
+        self.vel_y = 0
+        self.is_dashing = False
+        self.dash_frames = 0
+        self.ultimate_cast_timer -= 1
+        if self.ultimate_cast_timer > 0:
+            return
+
+        if self.casting_ultimate_id == "fireball":
+            self._launch_fireball()
+            self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["fireball"]["cooldown_frames"]
+
+        self.casting_ultimate_id = None
+        if not self.ultimate_preview_active:
+            self.teleport_glow_color = None
 
     def _perform_teleportation(self):
         ultimate = ULTIMATE_SHOP_INDEX["teleportation"]
@@ -534,6 +596,43 @@ class BaseCharacter:
         else:
             self.x += distance
             self.facing_right = True
+
+    def _launch_fireball(self):
+        ultimate = ULTIMATE_SHOP_INDEX["fireball"]
+        damage = self._scale_damage(ultimate["damage"])
+        knockback_base, knockback_scaling = self._scale_knockback(
+            ultimate["knockback_base"],
+            ultimate["knockback_scaling"],
+        )
+        hitbox_width, hitbox_height, _, _ = self._scale_attack_range(
+            ultimate["hitbox_width"],
+            ultimate["hitbox_height"],
+            0,
+            0,
+        )
+
+        projectile = Projectile(
+            name="Fireball",
+            damage=damage,
+            knockback_base=knockback_base,
+            knockback_scaling=knockback_scaling,
+            knockback_angle=ultimate["knockback_angle"],
+            hitbox_width=hitbox_width,
+            hitbox_height=hitbox_height,
+            speed=ultimate["projectile_speed"],
+            lifetime=ultimate["projectile_lifetime"],
+        )
+        projectile.owner_id = self.player_id
+        spawn_x = self.x + self.width + ultimate["spawn_offset_x"] if self.facing_right else self.x - hitbox_width - ultimate["spawn_offset_x"]
+        spawn_y = self.y + ultimate["spawn_offset_y"]
+        projectile.launch(spawn_x, spawn_y, self.facing_right)
+        self.active_ultimate_projectile = projectile
+
+    def _update_ultimate_projectile(self):
+        if not self.active_ultimate_projectile:
+            return
+        if not self.active_ultimate_projectile.update() or not self.active_ultimate_projectile.is_active:
+            self.active_ultimate_projectile = None
 
     def _update_attack(self):
         # Werk de actieve aanval bij: startup → active → recovery.
@@ -586,6 +685,9 @@ class BaseCharacter:
         self.hitstun = int(knockback * 2)
         self.active_attack = None
         self.cancel_ultimate_preview()
+        self.ultimate_cast_timer = 0
+        self.casting_ultimate_id = None
+        self.teleport_glow_color = None
 
     def die(self):
         # Verlies een leven en respawn als er nog levens over zijn.
@@ -619,6 +721,7 @@ class BaseCharacter:
         self.hitstun = 0
         self.invincible = 120  # 2 seconden onkwetsbaar (120 frames bij 60 fps)
         self.active_attack = None
+        self.active_ultimate_projectile = None
         self.jumps_remaining = self.max_jumps
         self.last_attacker_id = None
         self.last_attacker_timer = 0
@@ -626,6 +729,9 @@ class BaseCharacter:
         self.landing_timer = 0
         self.prev_on_ground = False
         self.cancel_ultimate_preview()
+        self.ultimate_cast_timer = 0
+        self.casting_ultimate_id = None
+        self.teleport_glow_color = None
 
     def consume_gameplay_events(self):
         events = list(self.gameplay_events)
@@ -634,7 +740,9 @@ class BaseCharacter:
 
     def _update_animation_state(self):
         # Bepaal welke animatie afgespeeld wordt op basis van wat de character doet.
-        if not self.active_attack:
+        if self.ultimate_cast_timer > 0:
+            self.state = "special"
+        elif not self.active_attack:
             just_landed = self.on_ground and not self.prev_on_ground
 
             if self.hitstun > 0:
@@ -813,11 +921,23 @@ class BaseCharacter:
             preview_rect = self._get_teleport_preview_rect(camera_offset)
             if preview_rect:
                 pygame.draw.rect(screen, self.teleport_glow_color, preview_rect, 2, border_radius=10)
+        elif self.ultimate_cast_timer > 0 and self.teleport_glow_color:
+            glow_rect = pygame.Rect(draw_x - 8, draw_y - 8, self.width + 16, self.height + 16)
+            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+            glow_surface.fill((*self.teleport_glow_color, 70))
+            screen.blit(glow_surface, glow_rect.topleft)
+            pygame.draw.rect(screen, self.teleport_glow_color, glow_rect, 2, border_radius=12)
 
         # Teken de actieve hitbox (rood kader, voor debugging)
         if self.active_attack and self.active_attack.is_active:
             hitbox = self.active_attack.hitbox
             pygame.draw.rect(screen, (255, 0, 0, 128),
+                             (hitbox.x - camera_offset[0],
+                              hitbox.y - camera_offset[1],
+                              hitbox.width, hitbox.height), 2)
+        if self.active_ultimate_projectile and self.active_ultimate_projectile.is_active:
+            hitbox = self.active_ultimate_projectile.hitbox
+            pygame.draw.rect(screen, (255, 140, 0),
                              (hitbox.x - camera_offset[0],
                               hitbox.y - camera_offset[1],
                               hitbox.width, hitbox.height), 2)
@@ -851,9 +971,12 @@ class BaseCharacter:
             "equipped_ultimate_id": self.equipped_ultimate_id,
             "ultimate_cooldown_timer": self.ultimate_cooldown_timer,
             "ultimate_preview_active": self.ultimate_preview_active,
+            "ultimate_cast_timer": self.ultimate_cast_timer,
+            "casting_ultimate_id": self.casting_ultimate_id,
             "pending_ultimate_id": self.pending_ultimate_id,
             "pending_ultimate_direction": self.pending_ultimate_direction,
             "active_attack": self.active_attack.to_dict() if self.active_attack else None,
+            "active_ultimate_projectile": self.active_ultimate_projectile.to_dict() if self.active_ultimate_projectile else None,
         }
 
     def set_state(self, state):
@@ -885,15 +1008,24 @@ class BaseCharacter:
         self.set_equipped_ultimate(state.get("equipped_ultimate_id"))
         self.ultimate_cooldown_timer = state.get("ultimate_cooldown_timer", 0)
         self.ultimate_preview_active = state.get("ultimate_preview_active", False)
+        self.ultimate_cast_timer = state.get("ultimate_cast_timer", 0)
+        self.casting_ultimate_id = state.get("casting_ultimate_id")
         self.pending_ultimate_id = state.get("pending_ultimate_id")
         self.pending_ultimate_direction = state.get("pending_ultimate_direction")
         if self.pending_ultimate_id == "teleportation":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["teleportation"].get("glow_color", Colors.CYAN)
+        elif self.casting_ultimate_id == "fireball":
+            self.teleport_glow_color = ULTIMATE_SHOP_INDEX["fireball"].get("glow_color", Colors.ORANGE)
         else:
             self.teleport_glow_color = None
 
         attack_state = state.get("active_attack")
-        self.active_attack = Attack.from_dict(attack_state) if attack_state else None
+        if attack_state and attack_state.get("type") == "projectile":
+            self.active_attack = Projectile.from_dict(attack_state)
+        else:
+            self.active_attack = Attack.from_dict(attack_state) if attack_state else None
+        projectile_state = state.get("active_ultimate_projectile")
+        self.active_ultimate_projectile = Projectile.from_dict(projectile_state) if projectile_state else None
         self.last_attacker_id = None
         self.last_attacker_timer = 0
         self.gameplay_events = []

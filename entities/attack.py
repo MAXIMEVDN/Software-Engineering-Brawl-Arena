@@ -185,3 +185,27 @@ class Projectile(Attack):
             "lifetime": self.lifetime,
         })
         return data
+
+    @classmethod
+    def from_dict(cls, data):
+        projectile = cls(
+            name=data["name"],
+            damage=data["damage"],
+            knockback_base=data["knockback_base"],
+            knockback_scaling=data["knockback_scaling"],
+            knockback_angle=data["knockback_angle"],
+            hitbox_width=data.get("hitbox_width", data["hitbox"]["width"]),
+            hitbox_height=data.get("hitbox_height", data["hitbox"]["height"]),
+            speed=abs(data.get("vel_x", 0)),
+            lifetime=data.get("lifetime", data.get("active_frames", 0)),
+            gravity=bool(data.get("vel_y", 0)),
+        )
+        projectile.is_active = data["is_active"]
+        projectile.hitbox.x = data["hitbox"]["x"]
+        projectile.hitbox.y = data["hitbox"]["y"]
+        projectile.has_hit = set(data["has_hit"])
+        projectile.owner_id = data["owner_id"]
+        projectile.vel_x = data.get("vel_x", 0)
+        projectile.vel_y = data.get("vel_y", 0)
+        projectile.lifetime = data.get("lifetime", projectile.lifetime)
+        return projectile

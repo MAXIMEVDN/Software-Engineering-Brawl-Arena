@@ -34,6 +34,7 @@ class PlayerInputState:
     light_attack: bool = False
     heavy_attack: bool = False
     special_attack: bool = False
+    ultimate_trigger: bool = False
     ultimate_release: bool = False
 
     def update_from_payload(self, payload: Dict[str, Any]) -> None:
@@ -47,6 +48,7 @@ class PlayerInputState:
         self.light_attack = self.light_attack or bool(payload.get("light_attack", False))
         self.heavy_attack = self.heavy_attack or bool(payload.get("heavy_attack", False))
         self.special_attack = self.special_attack or bool(payload.get("special_attack", False))
+        self.ultimate_trigger = self.ultimate_trigger or bool(payload.get("ultimate_trigger", False))
         self.ultimate_release = self.ultimate_release or bool(payload.get("ultimate_release", False))
 
     def consume_for_tick(self) -> Dict[str, bool]:
@@ -61,6 +63,7 @@ class PlayerInputState:
             "light_attack": self.light_attack,
             "heavy_attack": self.heavy_attack,
             "special_attack": self.special_attack,
+            "ultimate_trigger": self.ultimate_trigger,
             "ultimate_release": self.ultimate_release,
         }
         self.jump = False
@@ -68,6 +71,7 @@ class PlayerInputState:
         self.light_attack = False
         self.heavy_attack = False
         self.special_attack = False
+        self.ultimate_trigger = False
         self.ultimate_release = False
         return current
 

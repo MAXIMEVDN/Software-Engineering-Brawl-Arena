@@ -328,6 +328,26 @@ ULTIMATE_SHOP_ITEMS = [
         "distance": 400,
         "glow_color": (90, 220, 255),
     },
+    {
+        "id": "fireball",
+        "name": "Fireball",
+        "cost": 8,
+        "focus": "Projectile",
+        "description": "Cast a fast fireball straight ahead that bursts on first hit.",
+        "cast_frames": 8,
+        "cooldown_frames": 6 * FPS,
+        "damage": 16,
+        "knockback_base": 6.0,
+        "knockback_scaling": 0.11,
+        "knockback_angle": 28,
+        "projectile_speed": 10,
+        "projectile_lifetime": 70,
+        "hitbox_width": 46,
+        "hitbox_height": 30,
+        "spawn_offset_x": 20,
+        "spawn_offset_y": 14,
+        "glow_color": (255, 130, 40),
+    },
 ]
 ULTIMATE_SHOP_INDEX = {item["id"]: item for item in ULTIMATE_SHOP_ITEMS}
 

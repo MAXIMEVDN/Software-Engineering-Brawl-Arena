@@ -73,6 +73,7 @@ class Game:
             "light_attack": False,
             "heavy_attack": False,
             "special_attack": False,
+            "ultimate_trigger": False,
             "ultimate_release": False,
         }
 
@@ -205,6 +206,8 @@ class Game:
             self.pending_network_actions["heavy_attack"] = True
         elif event.key in CONTROLS["special_attack"]:
             self.pending_network_actions["special_attack"] = True
+        elif event.key in CONTROLS["ultimate_ability"]:
+            self.pending_network_actions["ultimate_trigger"] = True
 
     def _handle_game_over_event(self, event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -554,6 +557,7 @@ class Game:
                 "light_attack": self.pending_network_actions["light_attack"],
                 "heavy_attack": self.pending_network_actions["heavy_attack"],
                 "special_attack": self.pending_network_actions["special_attack"],
+                "ultimate_trigger": self.pending_network_actions["ultimate_trigger"],
                 "ultimate_release": self.pending_network_actions["ultimate_release"],
             }
             payload = {"type": "input", "data": {"input_state": input_payload}}

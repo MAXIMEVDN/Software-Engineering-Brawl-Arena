@@ -303,12 +303,17 @@ class GameState:
             player.character.hitstun = 0
             player.character.invincible = 120
             player.character.active_attack = None
+            player.character.active_ultimate_projectile = None
             player.character.is_dashing = False
             player.character.dash_frames = 0
             player.character.dash_cooldown_timer = 0
             player.character.jumps_remaining = player.character.max_jumps
             player.character.attack_cooldown = 0
             player.character.attack_frame = 0
+            player.character.ultimate_cooldown_timer = 0
+            player.character.ultimate_cast_timer = 0
+            player.character.casting_ultimate_id = None
+            player.character.cancel_ultimate_preview()
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def _freeze_characters(self) -> None:
@@ -321,7 +326,11 @@ class GameState:
             player.character.is_dashing = False
             player.character.dash_frames = 0
             player.character.active_attack = None
+            player.character.active_ultimate_projectile = None
             player.character.attack_frame = 0
+            player.character.ultimate_cast_timer = 0
+            player.character.casting_ultimate_id = None
+            player.character.cancel_ultimate_preview()
 
     def _start_round_end(self, transition: str) -> None:
         self.phase = "round_end"
