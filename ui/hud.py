@@ -7,7 +7,7 @@
 
 import pygame
 
-from config import Colors, SCREEN_HEIGHT, SCREEN_WIDTH, FPS
+from config import Colors, SCREEN_HEIGHT, SCREEN_WIDTH, FPS, ULTIMATE_SHOP_INDEX
 from ui.title_text import draw_title_style_text, get_ui_font, render_fit_text
 
 
@@ -27,17 +27,22 @@ class HUD:
         ]
 
     def draw(self, characters, local_player_id=0, game_state=None):
+        local_character = None
         for i, character in enumerate(characters):
             if i >= len(self.hud_positions):
                 break
             pos = self.hud_positions[i]
             is_local = character.player_id == local_player_id
+            if is_local:
+                local_character = character
             self._draw_player_hud(character, pos, is_local, game_state)
 
         self._draw_controls_hint()
         if game_state is not None:
             self._draw_match_info(game_state)
             self._draw_round_end_countdown(game_state)
+        if local_character is not None:
+            self._draw_ultimate_cooldown(local_character)
 
     def _draw_player_hud(self, character, pos, is_local, game_state):
         x, y = pos
@@ -124,9 +129,43 @@ class HUD:
         return (255, 50, 50)
 
     def _draw_controls_hint(self):
-        controls = "WASD/Arrows Move  J Light  K Heavy  L Special  Shift Dash"
+        controls = "WASD/Arrows Move  J Light  K Heavy  L Special  U Ultimate  Shift Dash"
         surface = render_fit_text(controls, Colors.GRAY, SCREEN_WIDTH - 40, 18, 12)
         self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, 18)))
+
+    def _draw_ultimate_cooldown(self, character):
+        box_width = 208
+        box_height = 68
+        margin = 24
+        box_rect = pygame.Rect(
+            SCREEN_WIDTH - box_width - margin,
+            SCREEN_HEIGHT - box_height - margin,
+            box_width,
+            box_height,
+        )
+
+        pygame.draw.rect(self.screen, (24, 26, 32), box_rect, border_radius=12)
+        pygame.draw.rect(self.screen, Colors.WHITE, box_rect, 2, border_radius=12)
+
+        ultimate_id = getattr(character, "equipped_ultimate_id", None)
+        ultimate_name = "No Ultimate"
+        if ultimate_id and ultimate_id in ULTIMATE_SHOP_INDEX:
+            ultimate_name = ULTIMATE_SHOP_INDEX[ultimate_id]["name"]
+
+        title = render_fit_text(ultimate_name, Colors.WHITE, box_rect.width - 20, 18, 12)
+        self.screen.blit(title, (box_rect.x + 10, box_rect.y + 10))
+
+        cooldown_frames = max(0, int(getattr(character, "ultimate_cooldown_timer", 0)))
+        if cooldown_frames > 0:
+            seconds = cooldown_frames / FPS
+            status_text = f"Cooldown: {seconds:.1f}s"
+            status_color = Colors.ORANGE
+        else:
+            status_text = "Ready"
+            status_color = Colors.GREEN
+
+        status = self.font_medium.render(status_text, True, status_color)
+        self.screen.blit(status, (box_rect.x + 10, box_rect.y + 36))
 
     def draw_winner(self, winner_name, winner_color):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
