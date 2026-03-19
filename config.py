@@ -348,6 +348,18 @@ ULTIMATE_SHOP_ITEMS = [
         "spawn_offset_y": 14,
         "glow_color": (255, 130, 40),
     },
+    {
+        "id": "invisibility",
+        "name": "Invisibility",
+        "cost": 13,
+        "focus": "Stealth",
+        "description": "Fade out after a short cast and stay hidden until time runs out or you attack.",
+        "cast_frames": 18,
+        "duration_frames": 5 * FPS,
+        "cooldown_frames": 8 * FPS,
+        "attack_damage_multiplier": 1.5,
+        "glow_color": (180, 180, 200),
+    },
 ]
 ULTIMATE_SHOP_INDEX = {item["id"]: item for item in ULTIMATE_SHOP_ITEMS}
 

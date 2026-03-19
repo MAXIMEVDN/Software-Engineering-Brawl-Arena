@@ -313,6 +313,7 @@ class GameState:
             player.character.ultimate_cooldown_timer = 0
             player.character.ultimate_cast_timer = 0
             player.character.casting_ultimate_id = None
+            player.character.invisible_timer = 0
             player.character.cancel_ultimate_preview()
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
@@ -330,6 +331,7 @@ class GameState:
             player.character.attack_frame = 0
             player.character.ultimate_cast_timer = 0
             player.character.casting_ultimate_id = None
+            player.character.invisible_timer = 0
             player.character.cancel_ultimate_preview()
 
     def _start_round_end(self, transition: str) -> None:

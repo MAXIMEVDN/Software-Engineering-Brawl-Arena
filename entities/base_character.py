@@ -126,6 +126,7 @@ class BaseCharacter:
         self.pending_ultimate_direction = None
         self.teleport_glow_color = None
         self.active_ultimate_projectile = None
+        self.invisible_timer = 0
 
     def light_attack(self):
         # Geeft een Attack-object terug voor de lichte aanval.
@@ -292,6 +293,10 @@ class BaseCharacter:
             self.dash_cooldown_timer -= 1
         if self.ultimate_cooldown_timer > 0:
             self.ultimate_cooldown_timer -= 1
+        if self.invisible_timer > 0:
+            self.invisible_timer -= 1
+            if self.invisible_timer <= 0:
+                self.end_invisibility(start_cooldown=True)
         if self.last_attacker_timer > 0:
             self.last_attacker_timer -= 1
             if self.last_attacker_timer <= 0:
@@ -480,6 +485,10 @@ class BaseCharacter:
         else:
             return None
 
+        if self.invisible_timer > 0:
+            self.active_attack.damage *= ULTIMATE_SHOP_INDEX["invisibility"]["attack_damage_multiplier"]
+            self.end_invisibility(start_cooldown=True)
+
         self.attack_frame = 0
         return self.active_attack
 
@@ -533,14 +542,16 @@ class BaseCharacter:
             return False
         if self.active_attack or self.attack_cooldown > 0:
             return False
-        if self.equipped_ultimate_id != "fireball":
+        if self.equipped_ultimate_id not in ("fireball", "invisibility"):
             return False
         if self.ultimate_cooldown_timer > 0:
             return False
+        if self.invisible_timer > 0:
+            return False
 
-        ultimate = ULTIMATE_SHOP_INDEX["fireball"]
+        ultimate = ULTIMATE_SHOP_INDEX[self.equipped_ultimate_id]
         self.ultimate_cast_timer = ultimate["cast_frames"]
-        self.casting_ultimate_id = "fireball"
+        self.casting_ultimate_id = self.equipped_ultimate_id
         self.teleport_glow_color = ultimate.get("glow_color", Colors.ORANGE)
         self.vel_x = 0
         self.vel_y = 0
@@ -576,6 +587,8 @@ class BaseCharacter:
         if self.casting_ultimate_id == "fireball":
             self._launch_fireball()
             self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["fireball"]["cooldown_frames"]
+        elif self.casting_ultimate_id == "invisibility":
+            self._activate_invisibility()
 
         self.casting_ultimate_id = None
         if not self.ultimate_preview_active:
@@ -627,6 +640,15 @@ class BaseCharacter:
         spawn_y = self.y + ultimate["spawn_offset_y"]
         projectile.launch(spawn_x, spawn_y, self.facing_right)
         self.active_ultimate_projectile = projectile
+
+    def _activate_invisibility(self):
+        self.invisible_timer = ULTIMATE_SHOP_INDEX["invisibility"]["duration_frames"]
+
+    def end_invisibility(self, start_cooldown=False):
+        was_invisible = self.invisible_timer > 0
+        self.invisible_timer = 0
+        if start_cooldown and was_invisible:
+            self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["invisibility"]["cooldown_frames"]
 
     def _update_ultimate_projectile(self):
         if not self.active_ultimate_projectile:
@@ -732,6 +754,7 @@ class BaseCharacter:
         self.ultimate_cast_timer = 0
         self.casting_ultimate_id = None
         self.teleport_glow_color = None
+        self.invisible_timer = 0
 
     def consume_gameplay_events(self):
         events = list(self.gameplay_events)
@@ -883,7 +906,7 @@ class BaseCharacter:
         frames = anim[self.facing_right]
         return frames[self.animation_frame % len(frames)]
 
-    def draw(self, screen, camera_offset=(0, 0)):
+    def draw(self, screen, camera_offset=(0, 0), viewer_player_id=None):
         # Teken de character op het scherm.
         draw_x = self.x - camera_offset[0]
         draw_y = self.y - camera_offset[1]
@@ -894,6 +917,9 @@ class BaseCharacter:
 
         # Invincibility blink: sla elke andere periode over
         if self.invincible > 0 and self.invincible % 10 < 5:
+            return
+
+        if self.invisible_timer > 0:
             return
 
         if self.sprites_loaded:
@@ -975,6 +1001,7 @@ class BaseCharacter:
             "casting_ultimate_id": self.casting_ultimate_id,
             "pending_ultimate_id": self.pending_ultimate_id,
             "pending_ultimate_direction": self.pending_ultimate_direction,
+            "invisible_timer": self.invisible_timer,
             "active_attack": self.active_attack.to_dict() if self.active_attack else None,
             "active_ultimate_projectile": self.active_ultimate_projectile.to_dict() if self.active_ultimate_projectile else None,
         }
@@ -1012,10 +1039,13 @@ class BaseCharacter:
         self.casting_ultimate_id = state.get("casting_ultimate_id")
         self.pending_ultimate_id = state.get("pending_ultimate_id")
         self.pending_ultimate_direction = state.get("pending_ultimate_direction")
+        self.invisible_timer = state.get("invisible_timer", 0)
         if self.pending_ultimate_id == "teleportation":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["teleportation"].get("glow_color", Colors.CYAN)
         elif self.casting_ultimate_id == "fireball":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["fireball"].get("glow_color", Colors.ORANGE)
+        elif self.casting_ultimate_id == "invisibility":
+            self.teleport_glow_color = ULTIMATE_SHOP_INDEX["invisibility"].get("glow_color", Colors.LIGHT_GRAY)
         else:
             self.teleport_glow_color = None
 

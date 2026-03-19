@@ -374,7 +374,7 @@ class Game:
         self.effects.draw(self.screen, self.camera_offset)
 
         for character in self._get_all_characters():
-            character.draw(self.screen, self.camera_offset)
+            character.draw(self.screen, self.camera_offset, self.local_player_id)
 
         self.hud.draw(self._get_all_characters(), self.local_player_id or 0, self.game_state)
 
