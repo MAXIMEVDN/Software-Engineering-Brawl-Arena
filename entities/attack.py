@@ -33,7 +33,9 @@ class Attack:
 
     def __init__(self, name, damage, knockback_base, knockback_scaling,
                  knockback_angle, startup_frames, active_frames, recovery_frames,
-                 hitbox_width, hitbox_height, hitbox_offset_x=0, hitbox_offset_y=0):
+                 hitbox_width, hitbox_height, hitbox_offset_x=0, hitbox_offset_y=0,
+                 effect_type=None, hold_frames=0, throw_knockback_base=0.0,
+                 throw_knockback_scaling=0.0, throw_angle=0):
         self.name = name
         self.damage = damage
         self.knockback_base = knockback_base
@@ -48,6 +50,11 @@ class Attack:
         self.hitbox_height = hitbox_height
         self.hitbox_offset_x = hitbox_offset_x
         self.hitbox_offset_y = hitbox_offset_y
+        self.effect_type = effect_type
+        self.hold_frames = hold_frames
+        self.throw_knockback_base = throw_knockback_base
+        self.throw_knockback_scaling = throw_knockback_scaling
+        self.throw_angle = throw_angle
 
         # Runtime-staat
         self.hitbox = Hitbox(0, 0, hitbox_width, hitbox_height)
@@ -95,6 +102,11 @@ class Attack:
             "hitbox_height": self.hitbox_height,
             "hitbox_offset_x": self.hitbox_offset_x,
             "hitbox_offset_y": self.hitbox_offset_y,
+            "effect_type": self.effect_type,
+            "hold_frames": self.hold_frames,
+            "throw_knockback_base": self.throw_knockback_base,
+            "throw_knockback_scaling": self.throw_knockback_scaling,
+            "throw_angle": self.throw_angle,
             "is_active": self.is_active,
             "hitbox": {
                 "x": self.hitbox.x,
@@ -122,6 +134,11 @@ class Attack:
             hitbox_height=data.get("hitbox_height", data["hitbox"]["height"]),
             hitbox_offset_x=data.get("hitbox_offset_x", 0),
             hitbox_offset_y=data.get("hitbox_offset_y", 0),
+            effect_type=data.get("effect_type"),
+            hold_frames=data.get("hold_frames", 0),
+            throw_knockback_base=data.get("throw_knockback_base", 0.0),
+            throw_knockback_scaling=data.get("throw_knockback_scaling", 0.0),
+            throw_angle=data.get("throw_angle", 0),
         )
         attack.is_active = data["is_active"]
         attack.hitbox.x = data["hitbox"]["x"]

@@ -19,6 +19,8 @@ class CollisionSystem:
         self.hit_events = []
 
         for attacker in characters:
+            if getattr(attacker, "absorbed_by_id", None) is not None:
+                continue
             if attacker.active_attack and attacker.active_attack.is_active:
                 self._check_attack_hits(attacker, characters)
             if getattr(attacker, "active_ultimate_projectile", None) and attacker.active_ultimate_projectile.is_active:
@@ -38,6 +40,8 @@ class CollisionSystem:
 
         for target in all_characters:
             # Sla zichzelf en al geraakte targets over
+            if getattr(target, "absorbed_by_id", None) is not None:
+                continue
             if not attack.can_hit(target.player_id):
                 continue
 
@@ -53,6 +57,10 @@ class CollisionSystem:
     def _apply_hit(self, attacker, target, attack):
         # Registreer de treffer en pas schade en knockback toe.
         attack.register_hit(target.player_id)
+        if getattr(attack, "effect_type", None) == "grab":
+            attacker.handle_grab_hit(target, attack)
+            return
+
         attacker_x = attack.hitbox.x if getattr(attack, "vel_x", 0) else attacker.x
 
         target.take_damage(

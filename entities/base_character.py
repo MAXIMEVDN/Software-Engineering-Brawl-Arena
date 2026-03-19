@@ -139,6 +139,10 @@ class BaseCharacter:
         self.teleport_glow_color = None
         self.active_ultimate_projectile = None
         self.invisible_timer = 0
+        self.grabbed_target_id = None
+        self.grab_hold_timer = 0
+        self.absorbed_by_id = None
+        self._grabbed_target_ref = None
 
     def light_attack(self):
         # Geeft een Attack-object terug voor de lichte aanval.
@@ -250,6 +254,14 @@ class BaseCharacter:
         # Update alles voor één frame: timers, physics, collision, aanval, animatie.
         self._update_timers()
 
+        if self.absorbed_by_id is not None:
+            self.vel_x = 0
+            self.vel_y = 0
+            self.active_attack = None
+            self.active_ultimate_projectile = None
+            self._update_animation_state()
+            return
+
         if self.ultimate_cast_timer > 0:
             self._update_ultimate_cast()
             self._update_animation_state()
@@ -269,6 +281,8 @@ class BaseCharacter:
             self._update_attack()
         if self.active_ultimate_projectile:
             self._update_ultimate_projectile()
+        if self.grabbed_target_id is not None:
+            self._update_grab_hold()
 
         self._update_animation_state()
 
@@ -309,6 +323,8 @@ class BaseCharacter:
             self.invisible_timer -= 1
             if self.invisible_timer <= 0:
                 self.end_invisibility(start_cooldown=True)
+        if self.grab_hold_timer > 0 and self.grabbed_target_id is not None:
+            self.grab_hold_timer -= 1
         if self.last_attacker_timer > 0:
             self.last_attacker_timer -= 1
             if self.last_attacker_timer <= 0:
@@ -352,7 +368,7 @@ class BaseCharacter:
 
     def handle_input(self, keys):
         # Verwerk ingedrukte toetsen (voor beweging links/rechts en crouch).
-        if self.hitstun > 0 or self.ultimate_cast_timer > 0:
+        if self.hitstun > 0 or self.ultimate_cast_timer > 0 or self.absorbed_by_id is not None:
             return None
 
         crouching = self.on_ground and any(keys[k] for k in CONTROLS["down"])
@@ -371,7 +387,7 @@ class BaseCharacter:
 
     def handle_key_down(self, key):
         # Verwerk één toetsdruk (springen, dash, aanval).
-        if self.hitstun > 0:
+        if self.hitstun > 0 or self.absorbed_by_id is not None:
             return None
 
         if key in CONTROLS["ultimate_ability"]:
@@ -407,7 +423,7 @@ class BaseCharacter:
 
     def apply_input_state(self, input_state):
         # Verwerk input vanuit de server (netwerkmodus).
-        if self.hitstun > 0:
+        if self.hitstun > 0 or self.absorbed_by_id is not None:
             return
 
         if input_state.get("ultimate_trigger"):
@@ -481,7 +497,14 @@ class BaseCharacter:
 
     def start_attack(self, attack_type):
         # Start een aanval van het opgegeven type ("light", "heavy" of "special").
-        if self.active_attack or self.attack_cooldown > 0 or self.ultimate_preview_active or self.ultimate_cast_timer > 0:
+        if (
+            self.active_attack or
+            self.attack_cooldown > 0 or
+            self.ultimate_preview_active or
+            self.ultimate_cast_timer > 0 or
+            self.grabbed_target_id is not None or
+            self.absorbed_by_id is not None
+        ):
             return None
 
         # Roep de juiste methode aan — dit is polymorfisme in actie!
@@ -554,11 +577,15 @@ class BaseCharacter:
             return False
         if self.active_attack or self.attack_cooldown > 0:
             return False
-        if self.equipped_ultimate_id not in ("fireball", "invisibility"):
+        if self.equipped_ultimate_id not in ("fireball", "invisibility", "grab"):
             return False
         if self.ultimate_cooldown_timer > 0:
             return False
         if self.invisible_timer > 0:
+            return False
+        if self.grabbed_target_id is not None or self.absorbed_by_id is not None:
+            return False
+        if self.equipped_ultimate_id == "grab" and not self.on_ground:
             return False
 
         ultimate = ULTIMATE_SHOP_INDEX[self.equipped_ultimate_id]
@@ -601,6 +628,8 @@ class BaseCharacter:
             self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["fireball"]["cooldown_frames"]
         elif self.casting_ultimate_id == "invisibility":
             self._activate_invisibility()
+        elif self.casting_ultimate_id == "grab":
+            self._start_grab_attack()
 
         self.casting_ultimate_id = None
         if not self.ultimate_preview_active:
@@ -662,6 +691,99 @@ class BaseCharacter:
         if start_cooldown and was_invisible:
             self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["invisibility"]["cooldown_frames"]
 
+    def _start_grab_attack(self):
+        ultimate = ULTIMATE_SHOP_INDEX["grab"]
+        hitbox_width, hitbox_height, hitbox_offset_x, hitbox_offset_y = self._scale_attack_range(
+            ultimate["hitbox_width"],
+            ultimate["hitbox_height"],
+            ultimate["hitbox_offset_x"],
+            ultimate["hitbox_offset_y"],
+        )
+        self.active_attack = Attack(
+            name="Grab",
+            damage=0,
+            knockback_base=0,
+            knockback_scaling=0,
+            knockback_angle=0,
+            startup_frames=0,
+            active_frames=ultimate["active_frames"],
+            recovery_frames=ultimate["recovery_frames"],
+            hitbox_width=hitbox_width,
+            hitbox_height=hitbox_height,
+            hitbox_offset_x=hitbox_offset_x,
+            hitbox_offset_y=hitbox_offset_y,
+            effect_type="grab",
+            hold_frames=ultimate["hold_frames"],
+            throw_knockback_base=ultimate["throw_knockback_base"],
+            throw_knockback_scaling=ultimate["throw_knockback_scaling"],
+            throw_angle=ultimate["throw_angle"],
+        )
+        self.active_attack.owner_id = self.player_id
+        self.attack_frame = 0
+        self.state = "special"
+
+    def handle_grab_hit(self, target, attack):
+        if self.grabbed_target_id is not None or target.absorbed_by_id is not None:
+            return
+
+        self.grabbed_target_id = target.player_id
+        self.grab_hold_timer = attack.hold_frames
+        self._grabbed_target_ref = target
+        target.absorbed_by_id = self.player_id
+        target.vel_x = 0
+        target.vel_y = 0
+        target.active_attack = None
+        target.active_ultimate_projectile = None
+        target.cancel_ultimate_preview()
+        target.ultimate_cast_timer = 0
+        target.casting_ultimate_id = None
+        target.teleport_glow_color = None
+        target.end_invisibility(start_cooldown=False)
+        attack.is_active = False
+        self.active_attack = None
+
+    def _update_grab_hold(self):
+        target = self._grabbed_target_ref
+        if not target or target.player_id != self.grabbed_target_id:
+            self._clear_grabbed_target()
+            return
+
+        target.x = self.x
+        target.y = self.y
+        target.vel_x = 0
+        target.vel_y = 0
+
+        if self.grab_hold_timer <= 0:
+            self._release_grabbed_target()
+
+    def _release_grabbed_target(self):
+        target = self._grabbed_target_ref
+        if not target:
+            self._clear_grabbed_target()
+            return
+
+        ultimate = ULTIMATE_SHOP_INDEX["grab"]
+        target.absorbed_by_id = None
+        target.x = self.x + (self.width + 12 if self.facing_right else -target.width - 12)
+        target.y = self.y + 6
+        target.take_damage(
+            damage=0,
+            knockback_base=ultimate["throw_knockback_base"],
+            knockback_scaling=ultimate["throw_knockback_scaling"],
+            angle=ultimate["throw_angle"],
+            attacker_x=self.x,
+            attacker_id=self.player_id,
+        )
+        self.ultimate_cooldown_timer = ultimate["cooldown_frames"]
+        self._clear_grabbed_target()
+
+    def _clear_grabbed_target(self):
+        if self._grabbed_target_ref:
+            self._grabbed_target_ref.absorbed_by_id = None
+        self._grabbed_target_ref = None
+        self.grabbed_target_id = None
+        self.grab_hold_timer = 0
+
     def _update_ultimate_projectile(self):
         if not self.active_ultimate_projectile:
             return
@@ -691,6 +813,8 @@ class BaseCharacter:
 
         # Aanval is klaar
         if self.attack_frame >= total_frames:
+            if self.active_attack.effect_type == "grab":
+                self.ultimate_cooldown_timer = ULTIMATE_SHOP_INDEX["grab"]["cooldown_frames"]
             self.active_attack = None
             self.attack_cooldown = CharacterStats.ATTACK_COOLDOWN
 
@@ -722,6 +846,7 @@ class BaseCharacter:
         self.ultimate_cast_timer = 0
         self.casting_ultimate_id = None
         self.teleport_glow_color = None
+        self._clear_grabbed_target()
 
     def die(self):
         # Verlies een leven en respawn als er nog levens over zijn.
@@ -756,6 +881,7 @@ class BaseCharacter:
         self.invincible = 120  # 2 seconden onkwetsbaar (120 frames bij 60 fps)
         self.active_attack = None
         self.active_ultimate_projectile = None
+        self._clear_grabbed_target()
         self.jumps_remaining = self.max_jumps
         self.last_attacker_id = None
         self.last_attacker_timer = 0
@@ -767,6 +893,7 @@ class BaseCharacter:
         self.casting_ultimate_id = None
         self.teleport_glow_color = None
         self.invisible_timer = 0
+        self.absorbed_by_id = None
 
     def consume_gameplay_events(self):
         events = list(self.gameplay_events)
@@ -775,7 +902,9 @@ class BaseCharacter:
 
     def _update_animation_state(self):
         # Bepaal welke animatie afgespeeld wordt op basis van wat de character doet.
-        if self.ultimate_cast_timer > 0:
+        if self.absorbed_by_id is not None:
+            self.state = "idle"
+        elif self.ultimate_cast_timer > 0:
             self.state = "special"
         elif not self.active_attack:
             just_landed = self.on_ground and not self.prev_on_ground
@@ -883,6 +1012,8 @@ class BaseCharacter:
     def get_rect(self):
         # Geef de collision-rechthoek van de character terug.
         # Bij crouch alleen de onderste helft (om light attacks te ontwijken).
+        if self.absorbed_by_id is not None:
+            return pygame.Rect(-10000, -10000, 0, 0)
         if self.is_crouching:
             crouch_height = self.height // 2
             return pygame.Rect(self.x, self.y + crouch_height, self.width, crouch_height)
@@ -937,7 +1068,7 @@ class BaseCharacter:
         if self.invincible > 0 and self.invincible % 10 < 5:
             return
 
-        if self.invisible_timer > 0:
+        if self.absorbed_by_id is not None or self.invisible_timer > 0:
             return
 
         if self.sprites_loaded:
@@ -1028,6 +1159,9 @@ class BaseCharacter:
             "pending_ultimate_id": self.pending_ultimate_id,
             "pending_ultimate_direction": self.pending_ultimate_direction,
             "invisible_timer": self.invisible_timer,
+            "grabbed_target_id": self.grabbed_target_id,
+            "grab_hold_timer": self.grab_hold_timer,
+            "absorbed_by_id": self.absorbed_by_id,
             "active_attack": self.active_attack.to_dict() if self.active_attack else None,
             "active_ultimate_projectile": self.active_ultimate_projectile.to_dict() if self.active_ultimate_projectile else None,
         }
@@ -1066,12 +1200,18 @@ class BaseCharacter:
         self.pending_ultimate_id = state.get("pending_ultimate_id")
         self.pending_ultimate_direction = state.get("pending_ultimate_direction")
         self.invisible_timer = state.get("invisible_timer", 0)
+        self.grabbed_target_id = state.get("grabbed_target_id")
+        self.grab_hold_timer = state.get("grab_hold_timer", 0)
+        self.absorbed_by_id = state.get("absorbed_by_id")
+        self._grabbed_target_ref = None
         if self.pending_ultimate_id == "teleportation":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["teleportation"].get("glow_color", Colors.CYAN)
         elif self.casting_ultimate_id == "fireball":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["fireball"].get("glow_color", Colors.ORANGE)
         elif self.casting_ultimate_id == "invisibility":
             self.teleport_glow_color = ULTIMATE_SHOP_INDEX["invisibility"].get("glow_color", Colors.LIGHT_GRAY)
+        elif self.casting_ultimate_id == "grab":
+            self.teleport_glow_color = ULTIMATE_SHOP_INDEX["grab"].get("glow_color", Colors.GREEN)
         else:
             self.teleport_glow_color = None
 

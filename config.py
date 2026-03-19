@@ -360,6 +360,26 @@ ULTIMATE_SHOP_ITEMS = [
         "attack_damage_multiplier": 1.5,
         "glow_color": (180, 180, 200),
     },
+    {
+        "id": "grab",
+        "name": "Grab",
+        "cost": 12,
+        "focus": "Control",
+        "description": "Absorb a nearby enemy, carry them briefly, then spit them out with a heavy throw.",
+        "cast_frames": 12,
+        "cooldown_frames": 7 * FPS,
+        "active_frames": 3,
+        "recovery_frames": 18,
+        "hitbox_width": 54,
+        "hitbox_height": 34,
+        "hitbox_offset_x": 10,
+        "hitbox_offset_y": 12,
+        "hold_frames": 2 * FPS,
+        "throw_knockback_base": 14.0,
+        "throw_knockback_scaling": 0.14,
+        "throw_angle": 42,
+        "glow_color": (120, 255, 160),
+    },
 ]
 ULTIMATE_SHOP_INDEX = {item["id"]: item for item in ULTIMATE_SHOP_ITEMS}
 
