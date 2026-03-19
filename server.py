@@ -26,36 +26,49 @@ from systems.collision import CollisionSystem
 class PlayerInputState:
     left: bool = False
     right: bool = False
+    up: bool = False
+    down: bool = False
+    ultimate_preview: bool = False
     jump: bool = False
     dash: bool = False
     light_attack: bool = False
     heavy_attack: bool = False
     special_attack: bool = False
+    ultimate_release: bool = False
 
     def update_from_payload(self, payload: Dict[str, Any]) -> None:
         self.left = bool(payload.get("left", False))
         self.right = bool(payload.get("right", False))
+        self.up = bool(payload.get("up", False))
+        self.down = bool(payload.get("down", False))
+        self.ultimate_preview = bool(payload.get("ultimate_preview", False))
         self.jump = self.jump or bool(payload.get("jump", False))
         self.dash = self.dash or bool(payload.get("dash", False))
         self.light_attack = self.light_attack or bool(payload.get("light_attack", False))
         self.heavy_attack = self.heavy_attack or bool(payload.get("heavy_attack", False))
         self.special_attack = self.special_attack or bool(payload.get("special_attack", False))
+        self.ultimate_release = self.ultimate_release or bool(payload.get("ultimate_release", False))
 
     def consume_for_tick(self) -> Dict[str, bool]:
         current = {
             "left": self.left,
             "right": self.right,
+            "up": self.up,
+            "down": self.down,
+            "ultimate_preview": self.ultimate_preview,
             "jump": self.jump,
             "dash": self.dash,
             "light_attack": self.light_attack,
             "heavy_attack": self.heavy_attack,
             "special_attack": self.special_attack,
+            "ultimate_release": self.ultimate_release,
         }
         self.jump = False
         self.dash = False
         self.light_attack = False
         self.heavy_attack = False
         self.special_attack = False
+        self.ultimate_release = False
         return current
 
 
@@ -191,10 +204,10 @@ class GameServer:
                 self.game_state.upgrade_stat(player_id, data.get("stat_name", ""))
             elif msg_type == "downgrade_stat":
                 self.game_state.downgrade_stat(player_id, data.get("stat_name", ""))
-            elif msg_type == "buy_attack":
-                self.game_state.buy_attack(player_id, data.get("attack_id", ""))
-            elif msg_type == "equip_attack":
-                self.game_state.equip_attack(player_id, data.get("attack_id", ""))
+            elif msg_type == "buy_ultimate":
+                self.game_state.buy_ultimate(player_id, data.get("ultimate_id", ""))
+            elif msg_type == "equip_ultimate":
+                self.game_state.equip_ultimate(player_id, data.get("ultimate_id", ""))
 
             return {
                 "type": "state",

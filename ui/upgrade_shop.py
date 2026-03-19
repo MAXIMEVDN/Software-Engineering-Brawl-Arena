@@ -1,6 +1,6 @@
 import pygame
 
-from config import ATTACK_SHOP_ITEMS, BUILD_STAT_NAMES, Colors, SCREEN_HEIGHT, SCREEN_WIDTH
+from config import BUILD_STAT_NAMES, Colors, SCREEN_HEIGHT, SCREEN_WIDTH, ULTIMATE_SHOP_ITEMS
 from ui.character_select import STAT_DISPLAY, _load_tinted_icon
 from ui.title_text import get_ui_font, render_fit_text
 
@@ -88,7 +88,7 @@ class StatUpgradeCard:
             screen.blit(surface, surface.get_rect(center=rect.center))
 
 
-class AttackOfferCard:
+class UltimateOfferCard:
 
     def __init__(self, offer, x, y, width=520, height=86):
         self.offer = offer
@@ -105,8 +105,8 @@ class AttackOfferCard:
         return False
 
     def draw(self, screen, player, selected=False):
-        owned = self.offer["id"] in player.owned_attack_ids
-        equipped = player.equipped_attacks.get(self.offer["slot"]) == self.offer["id"]
+        owned = self.offer["id"] in player.owned_ultimate_ids
+        equipped = player.equipped_ultimate_id == self.offer["id"]
         affordable = player.coins >= self.offer["cost"]
 
         pygame.draw.rect(screen, (36, 40, 50), self.rect, border_radius=16)
@@ -116,7 +116,7 @@ class AttackOfferCard:
         title = render_fit_text(self.offer["name"], Colors.WHITE, 300, 20, 12)
         screen.blit(title, (self.rect.left + 18, self.rect.top + 12))
 
-        meta = f"{self.offer['slot'].title()} | {self.offer['focus']} | {self.offer['cost']} coins"
+        meta = f"Ultimate | {self.offer['focus']} | {self.offer['cost']} coins"
         meta_surface = render_fit_text(meta, Colors.ORANGE, 300, 14, 10)
         screen.blit(meta_surface, (self.rect.left + 18, self.rect.top + 40))
 
@@ -149,12 +149,12 @@ class RoundUpgradeShop:
         self.small_font = get_ui_font(14)
 
         self.stat_cards = []
-        self.attack_cards = []
+        self.ultimate_cards = []
         self.ready_rect = pygame.Rect(SCREEN_WIDTH // 2 - 140, SCREEN_HEIGHT - 68, 280, 42)
         self.selected_section = "stats"
         self.selected_stat_index = 0
         self.selected_stat_focus = "plus"
-        self.selected_attack_index = 0
+        self.selected_ultimate_index = 0
         self._create_cards()
 
     def _create_cards(self):
@@ -169,9 +169,9 @@ class RoundUpgradeShop:
             StatUpgradeCard(stat_name, left_x, stat_y + (index * stat_spacing))
             for index, stat_name in enumerate(BUILD_STAT_NAMES)
         ]
-        self.attack_cards = [
-            AttackOfferCard(offer, right_x, attack_y + (index * attack_spacing))
-            for index, offer in enumerate(ATTACK_SHOP_ITEMS)
+        self.ultimate_cards = [
+            UltimateOfferCard(offer, right_x, attack_y + (index * attack_spacing))
+            for index, offer in enumerate(ULTIMATE_SHOP_ITEMS)
         ]
 
     def handle_event(self, event, player):
@@ -199,18 +199,18 @@ class RoundUpgradeShop:
                 self.selected_stat_focus = "plus"
                 return {"type": "upgrade_stat", "stat_name": card.stat_name}
 
-        for card in self.attack_cards:
+        for card in self.ultimate_cards:
             if not card.handle_event(event):
                 continue
-            self.selected_section = "attacks"
-            self.selected_attack_index = self.attack_cards.index(card)
+            self.selected_section = "ultimates"
+            self.selected_ultimate_index = self.ultimate_cards.index(card)
 
-            attack_id = card.offer["id"]
-            if attack_id in player.owned_attack_ids:
-                if player.equipped_attacks.get(card.offer["slot"]) == attack_id:
+            ultimate_id = card.offer["id"]
+            if ultimate_id in player.owned_ultimate_ids:
+                if player.equipped_ultimate_id == ultimate_id:
                     return None
-                return {"type": "equip_attack", "attack_id": attack_id}
-            return {"type": "buy_attack", "attack_id": attack_id}
+                return {"type": "equip_ultimate", "ultimate_id": ultimate_id}
+            return {"type": "buy_ultimate", "ultimate_id": ultimate_id}
 
         return None
 
@@ -236,10 +236,10 @@ class RoundUpgradeShop:
                 self.selected_stat_focus = "plus"
                 return
 
-        for index, card in enumerate(self.attack_cards):
+        for index, card in enumerate(self.ultimate_cards):
             if card.rect.collidepoint(mouse_pos):
-                self.selected_section = "attacks"
-                self.selected_attack_index = index
+                self.selected_section = "ultimates"
+                self.selected_ultimate_index = index
                 return
 
     def _handle_keyboard_navigation(self, event, player):
@@ -249,12 +249,12 @@ class RoundUpgradeShop:
                     self.selected_stat_index -= 1
                 else:
                     self.selected_section = "ready"
-            elif self.selected_section == "attacks":
-                if self.selected_attack_index > 0:
-                    self.selected_attack_index -= 1
+            elif self.selected_section == "ultimates":
+                if self.selected_ultimate_index > 0:
+                    self.selected_ultimate_index -= 1
                 else:
                     self.selected_section = "stats"
-                    self.selected_stat_index = self.selected_attack_index
+                    self.selected_stat_index = self.selected_ultimate_index
                     self.selected_stat_focus = "plus"
             elif self.selected_section == "ready":
                 self.selected_section = "stats"
@@ -268,14 +268,14 @@ class RoundUpgradeShop:
                     self.selected_stat_index += 1
                 else:
                     self.selected_section = "ready"
-            elif self.selected_section == "attacks":
-                if self.selected_attack_index < len(self.attack_cards) - 1:
-                    self.selected_attack_index += 1
+            elif self.selected_section == "ultimates":
+                if self.selected_ultimate_index < len(self.ultimate_cards) - 1:
+                    self.selected_ultimate_index += 1
                 else:
                     self.selected_section = "ready"
             elif self.selected_section == "ready":
-                self.selected_section = "attacks"
-                self.selected_attack_index = 0
+                self.selected_section = "ultimates"
+                self.selected_ultimate_index = 0
             return None
 
         if event.key in (pygame.K_a, pygame.K_LEFT):
@@ -283,11 +283,11 @@ class RoundUpgradeShop:
                 if self.selected_stat_focus == "minus":
                     self.selected_stat_focus = "plus"
                 else:
-                    self.selected_section = "attacks"
-                    self.selected_attack_index = self.selected_stat_index
-            elif self.selected_section == "attacks":
+                    self.selected_section = "ultimates"
+                    self.selected_ultimate_index = self.selected_stat_index
+            elif self.selected_section == "ultimates":
                 self.selected_section = "stats"
-                self.selected_stat_index = self.selected_attack_index
+                self.selected_stat_index = self.selected_ultimate_index
                 self.selected_stat_focus = "minus"
             elif self.selected_section == "ready":
                 self.selected_section = "stats"
@@ -300,28 +300,28 @@ class RoundUpgradeShop:
                 if self.selected_stat_focus == "plus":
                     self.selected_stat_focus = "minus"
                 else:
-                    self.selected_section = "attacks"
-                    self.selected_attack_index = self.selected_stat_index
-            elif self.selected_section == "attacks":
+                    self.selected_section = "ultimates"
+                    self.selected_ultimate_index = self.selected_stat_index
+            elif self.selected_section == "ultimates":
                 self.selected_section = "stats"
-                self.selected_stat_index = self.selected_attack_index
+                self.selected_stat_index = self.selected_ultimate_index
                 self.selected_stat_focus = "plus"
             elif self.selected_section == "ready":
-                self.selected_section = "attacks"
-                self.selected_attack_index = len(self.attack_cards) - 1
+                self.selected_section = "ultimates"
+                self.selected_ultimate_index = len(self.ultimate_cards) - 1
             return None
 
         if event.key == pygame.K_RETURN:
             if self.selected_section == "stats":
                 action_type = "upgrade_stat" if self.selected_stat_focus == "plus" else "downgrade_stat"
                 return {"type": action_type, "stat_name": self.stat_cards[self.selected_stat_index].stat_name}
-            if self.selected_section == "attacks":
-                attack_id = self.attack_cards[self.selected_attack_index].offer["id"]
-                if attack_id in player.owned_attack_ids:
-                    if player.equipped_attacks.get(self.attack_cards[self.selected_attack_index].offer["slot"]) == attack_id:
+            if self.selected_section == "ultimates":
+                ultimate_id = self.ultimate_cards[self.selected_ultimate_index].offer["id"]
+                if ultimate_id in player.owned_ultimate_ids:
+                    if player.equipped_ultimate_id == ultimate_id:
                         return None
-                    return {"type": "equip_attack", "attack_id": attack_id}
-                return {"type": "buy_attack", "attack_id": attack_id}
+                    return {"type": "equip_ultimate", "ultimate_id": ultimate_id}
+                return {"type": "buy_ultimate", "ultimate_id": ultimate_id}
             if self.selected_section == "ready":
                 return {"type": "ready_for_round"}
         return None
@@ -357,7 +357,7 @@ class RoundUpgradeShop:
         left_title = self.header_font.render("Stats", True, Colors.WHITE)
         self.screen.blit(left_title, (56, 142))
 
-        right_title = self.header_font.render("Attacks", True, Colors.WHITE)
+        right_title = self.header_font.render("Ultimate", True, Colors.WHITE)
         self.screen.blit(right_title, (704, 142))
 
         for card in self.stat_cards:
@@ -370,11 +370,11 @@ class RoundUpgradeShop:
                 selected_button=self.selected_stat_focus if self.selected_stat_focus in ("minus", "plus") else None,
             )
 
-        for card in self.attack_cards:
+        for card in self.ultimate_cards:
             card.draw(
                 self.screen,
                 player,
-                selected=self.selected_section == "attacks" and self.attack_cards.index(card) == self.selected_attack_index,
+                selected=self.selected_section == "ultimates" and self.ultimate_cards.index(card) == self.selected_ultimate_index,
             )
 
         pygame.draw.rect(self.screen, (74, 140, 98), self.ready_rect, border_radius=12)
@@ -387,7 +387,7 @@ class RoundUpgradeShop:
             footer = f"You are ready | Waiting for others: {ready_count}/{player_count}"
             footer_color = Colors.GREEN
         else:
-            footer = "W/S move | A/D change | Enter confirm | Mouse also works"
+            footer = "W/S move | A/D change | Enter confirm | U activates equipped ultimate"
             footer_color = Colors.LIGHT_GRAY
 
         footer_surface = render_fit_text(footer, footer_color, SCREEN_WIDTH - 80, 14, 10)

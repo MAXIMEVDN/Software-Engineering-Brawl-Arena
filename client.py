@@ -73,6 +73,7 @@ class Game:
             "light_attack": False,
             "heavy_attack": False,
             "special_attack": False,
+            "ultimate_release": False,
         }
 
     def run(self):
@@ -179,11 +180,19 @@ class Game:
                     self._refresh_local_character_ref()
 
     def _handle_game_event(self, event):
-        if event.type != pygame.KEYDOWN:
+        if event.type not in (pygame.KEYDOWN, pygame.KEYUP):
             return
 
         if self.is_local and self.local_character:
-            self.local_character.handle_key_down(event.key)
+            if event.type == pygame.KEYDOWN:
+                self.local_character.handle_key_down(event.key)
+            else:
+                self.local_character.handle_key_up(event.key)
+            return
+
+        if event.type == pygame.KEYUP:
+            if event.key in CONTROLS["ultimate_ability"]:
+                self.pending_network_actions["ultimate_release"] = True
             return
 
         if event.key in CONTROLS["jump"]:
@@ -219,10 +228,10 @@ class Game:
                 self.game_state.upgrade_stat(self.local_player_id, action["stat_name"])
             elif action_type == "downgrade_stat":
                 self.game_state.downgrade_stat(self.local_player_id, action["stat_name"])
-            elif action_type == "buy_attack":
-                self.game_state.buy_attack(self.local_player_id, action["attack_id"])
-            elif action_type == "equip_attack":
-                self.game_state.equip_attack(self.local_player_id, action["attack_id"])
+            elif action_type == "buy_ultimate":
+                self.game_state.buy_ultimate(self.local_player_id, action["ultimate_id"])
+            elif action_type == "equip_ultimate":
+                self.game_state.equip_ultimate(self.local_player_id, action["ultimate_id"])
             elif action_type == "ready_for_round":
                 self._submit_round_ready()
             self._refresh_local_character_ref()
@@ -234,8 +243,8 @@ class Game:
         payload = {"type": action_type, "data": {}}
         if action_type in ("upgrade_stat", "downgrade_stat"):
             payload["data"]["stat_name"] = action["stat_name"]
-        elif action_type in ("buy_attack", "equip_attack"):
-            payload["data"]["attack_id"] = action["attack_id"]
+        elif action_type in ("buy_ultimate", "equip_ultimate"):
+            payload["data"]["ultimate_id"] = action["ultimate_id"]
 
         response = self.network.send(payload)
         if response and "game_state" in response:
@@ -537,11 +546,15 @@ class Game:
             input_payload = {
                 "left": any(keys[k] for k in CONTROLS["left"]),
                 "right": any(keys[k] for k in CONTROLS["right"]),
+                "up": any(keys[k] for k in CONTROLS["up"]),
+                "down": any(keys[k] for k in CONTROLS["down"]),
+                "ultimate_preview": any(keys[k] for k in CONTROLS["ultimate_ability"]),
                 "jump": self.pending_network_actions["jump"],
                 "dash": self.pending_network_actions["dash"],
                 "light_attack": self.pending_network_actions["light_attack"],
                 "heavy_attack": self.pending_network_actions["heavy_attack"],
                 "special_attack": self.pending_network_actions["special_attack"],
+                "ultimate_release": self.pending_network_actions["ultimate_release"],
             }
             payload = {"type": "input", "data": {"input_state": input_payload}}
         else:

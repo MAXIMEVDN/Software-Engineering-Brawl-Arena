@@ -11,7 +11,6 @@ from entities.coin_pickup import CoinPickup
 from entities.platform import Platform
 from entities.warrior import Warrior
 from config import (
-    ATTACK_SHOP_INDEX,
     COINS_LOST_ON_DEATH,
     COINS_PER_KILL,
     COINS_PER_ROUND,
@@ -32,6 +31,7 @@ from config import (
     STAGE_PLATFORMS,
     STAT_POINT_BUDGET,
     STAT_SELECT_SECONDS,
+    ULTIMATE_SHOP_INDEX,
 )
 
 
@@ -45,21 +45,15 @@ class PlayerData:
     build_stats: Dict[str, int] = None
     stats_locked: bool = False
     coins: int = 0
-    owned_attack_ids: List[str] = None
-    equipped_attacks: Dict[str, Optional[str]] = None
+    owned_ultimate_ids: List[str] = None
+    equipped_ultimate_id: Optional[str] = None
     round_stat_upgrades: Dict[str, int] = None
 
     def __post_init__(self):
         if self.build_stats is None:
             self.build_stats = dict(DEFAULT_BUILD_STATS)
-        if self.owned_attack_ids is None:
-            self.owned_attack_ids = []
-        if self.equipped_attacks is None:
-            self.equipped_attacks = {
-                "light": None,
-                "heavy": None,
-                "special": None,
-            }
+        if self.owned_ultimate_ids is None:
+            self.owned_ultimate_ids = []
         if self.round_stat_upgrades is None:
             self.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
@@ -117,12 +111,8 @@ class GameState:
             self.players[player_id].build_stats = dict(DEFAULT_BUILD_STATS)
             self.players[player_id].character = None
             self.players[player_id].coins = 0
-            self.players[player_id].owned_attack_ids = []
-            self.players[player_id].equipped_attacks = {
-                "light": None,
-                "heavy": None,
-                "special": None,
-            }
+            self.players[player_id].owned_ultimate_ids = []
+            self.players[player_id].equipped_ultimate_id = None
             self.players[player_id].round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
             return player_id
 
@@ -190,12 +180,8 @@ class GameState:
             player.character = None
             player.build_stats = dict(DEFAULT_BUILD_STATS)
             player.coins = 0
-            player.owned_attack_ids = []
-            player.equipped_attacks = {
-                "light": None,
-                "heavy": None,
-                "special": None,
-            }
+            player.owned_ultimate_ids = []
+            player.equipped_ultimate_id = None
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def start_game(self) -> None:
@@ -352,7 +338,7 @@ class GameState:
         if not player.character:
             return
         player.character.set_build_stats(player.build_stats)
-        player.character.set_equipped_attacks(player.equipped_attacks)
+        player.character.set_equipped_ultimate(player.equipped_ultimate_id)
 
     def _start_upgrade_shop(self, transition: str) -> None:
         self.phase = "upgrade_shop"
@@ -399,29 +385,29 @@ class GameState:
         self._apply_player_build_to_character(player)
         return True
 
-    def buy_attack(self, player_id: int, attack_id: str) -> bool:
+    def buy_ultimate(self, player_id: int, ultimate_id: str) -> bool:
         player = self.players.get(player_id)
-        offer = ATTACK_SHOP_INDEX.get(attack_id)
+        offer = ULTIMATE_SHOP_INDEX.get(ultimate_id)
         if not player or not offer or self.phase != "upgrade_shop":
             return False
-        if attack_id in player.owned_attack_ids or player.coins < offer["cost"]:
+        if ultimate_id in player.owned_ultimate_ids or player.coins < offer["cost"]:
             return False
 
         player.coins -= offer["cost"]
-        player.owned_attack_ids.append(attack_id)
-        player.equipped_attacks[offer["slot"]] = attack_id
+        player.owned_ultimate_ids.append(ultimate_id)
+        player.equipped_ultimate_id = ultimate_id
         self._apply_player_build_to_character(player)
         return True
 
-    def equip_attack(self, player_id: int, attack_id: str) -> bool:
+    def equip_ultimate(self, player_id: int, ultimate_id: str) -> bool:
         player = self.players.get(player_id)
-        offer = ATTACK_SHOP_INDEX.get(attack_id)
+        offer = ULTIMATE_SHOP_INDEX.get(ultimate_id)
         if not player or not offer or self.phase != "upgrade_shop":
             return False
-        if attack_id not in player.owned_attack_ids:
+        if ultimate_id not in player.owned_ultimate_ids:
             return False
 
-        player.equipped_attacks[offer["slot"]] = attack_id
+        player.equipped_ultimate_id = ultimate_id
         self._apply_player_build_to_character(player)
         return True
 
@@ -553,8 +539,8 @@ class GameState:
                     "build_stats": dict(player.build_stats),
                     "stats_locked": player.stats_locked,
                     "coins": player.coins,
-                    "owned_attack_ids": list(player.owned_attack_ids),
-                    "equipped_attacks": dict(player.equipped_attacks),
+                    "owned_ultimate_ids": list(player.owned_ultimate_ids),
+                    "equipped_ultimate_id": player.equipped_ultimate_id,
                     "round_stat_upgrades": dict(player.round_stat_upgrades),
                     "character_state": player.character.get_state() if player.character else None,
                 }
@@ -598,13 +584,8 @@ class GameState:
             player.build_stats = dict(pdata.get("build_stats", DEFAULT_BUILD_STATS))
             player.stats_locked = pdata.get("stats_locked", False)
             player.coins = pdata.get("coins", 0)
-            player.owned_attack_ids = list(pdata.get("owned_attack_ids", []))
-            player.equipped_attacks = {
-                "light": None,
-                "heavy": None,
-                "special": None,
-            }
-            player.equipped_attacks.update(pdata.get("equipped_attacks", {}))
+            player.owned_ultimate_ids = list(pdata.get("owned_ultimate_ids", []))
+            player.equipped_ultimate_id = pdata.get("equipped_ultimate_id")
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
             player.round_stat_upgrades.update(pdata.get("round_stat_upgrades", {}))
 
