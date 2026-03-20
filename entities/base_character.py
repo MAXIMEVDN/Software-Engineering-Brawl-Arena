@@ -96,6 +96,7 @@ class BaseCharacter:
         # Afmetingen
         self.width = CharacterStats.WIDTH
         self.height = CharacterStats.HEIGHT
+        self.respawn_position = (x, y)
 
         # Bewegingssnelheden (kunnen overschreven worden in subclass)
         self.walk_speed = CharacterStats.WALK_SPEED
@@ -980,8 +981,7 @@ class BaseCharacter:
 
     def respawn(self):
         # Zet de character terug op de startpositie.
-        from config import SPAWN_POSITIONS
-        spawn = SPAWN_POSITIONS[self.player_id % len(SPAWN_POSITIONS)]
+        spawn = self.respawn_position
         self.x = spawn[0]
         self.y = spawn[1]
         self.vel_x = 0
@@ -997,6 +997,7 @@ class BaseCharacter:
         self.last_attacker_timer = 0
         self.jump_type = "stationary"
         self.landing_timer = 0
+        self.on_ground = False
         self.prev_on_ground = False
         self.cancel_ultimate_preview()
         self.ultimate_cast_timer = 0
@@ -1006,6 +1007,9 @@ class BaseCharacter:
         self.absorbed_by_id = None
         self.parry_active_timer = 0
         self.parry_recovery_timer = 0
+
+    def set_respawn_position(self, x, y):
+        self.respawn_position = (x, y)
 
     def consume_gameplay_events(self):
         events = list(self.gameplay_events)

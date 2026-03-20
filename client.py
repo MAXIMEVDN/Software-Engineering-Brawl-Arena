@@ -16,10 +16,8 @@ from config import (
     GAME_TITLE,
     Colors,
     CONTROLS,
-    STAGE_PLATFORMS,
     NETWORK_TICK_RATE,
 )
-from entities.platform import Platform
 from game_state import GameState
 from network import Network
 from systems.collision import CollisionSystem
@@ -55,7 +53,6 @@ class Game:
 
         self.collision = CollisionSystem()
         self.effects = EffectsSystem()
-        self.platforms = [Platform.from_tuple(p) for p in STAGE_PLATFORMS]
 
         self.menu = MainMenu(self.screen)
         self.hud = HUD(self.screen)
@@ -66,7 +63,7 @@ class Game:
         self.last_network_sync = 0.0
         self.network_sync_interval = 1.0 / max(1, NETWORK_TICK_RATE)
 
-        self.background = self._load_background("assets/backgrounds/homepage background/Templebackground.jpg")
+        self.stage_background_cache = {}
         self.mouse_capture_active = False
         self.pending_network_actions = {
             "jump": False,
@@ -287,7 +284,7 @@ class Game:
                 keys = pygame.key.get_pressed()
                 self.local_character.handle_input(keys)
             for character in characters:
-                character.update(self.platforms)
+                character.update(self.game_state.platforms)
             hit_events = self.collision.update(characters)
             self.game_state.update()
         else:
@@ -316,18 +313,40 @@ class Game:
             self._render_game()
             self._render_game_over()
 
-    def _load_background(self, path):
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        full_path = os.path.join(base_dir, path)
-        if not os.path.exists(full_path):
+    def _resolve_background_path(self, relative_or_absolute_path):
+        if not relative_or_absolute_path:
+            return None
+
+        if os.path.isabs(relative_or_absolute_path):
+            return relative_or_absolute_path if os.path.exists(relative_or_absolute_path) else None
+
+        full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_or_absolute_path)
+        return full_path if os.path.exists(full_path) else None
+
+    def _load_stage_background_image(self):
+        background_path = self._resolve_background_path(self.game_state.current_stage_background_path)
+        if not background_path:
             return None
 
         try:
-            image = pygame.image.load(full_path).convert()
+            image = pygame.image.load(background_path).convert()
         except pygame.error:
             return None
 
         return pygame.transform.scale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+    def _draw_stage_background(self):
+        stage_id = self.game_state.current_stage_id or (
+            "final_round" if self.game_state.is_final_round else "default"
+        )
+        background = self.stage_background_cache.get(stage_id)
+        if background is None:
+            background = self._load_stage_background_image()
+            self.stage_background_cache[stage_id] = background
+        if background is not None:
+            self.screen.blit(background, (0, 0))
+        else:
+            self.screen.fill(Colors.BG_COLOR)
 
     def _apply_display_mode(self):
         flags = pygame.FULLSCREEN if self.fullscreen else 0
@@ -362,12 +381,9 @@ class Game:
         self.stat_select.draw(self.game_state.get_stat_select_seconds_remaining(), player_count, locked_count)
 
     def _render_game(self):
-        if self.background:
-            self.screen.blit(self.background, (0, 0))
-        else:
-            self.screen.fill(Colors.BG_COLOR)
+        self._draw_stage_background()
 
-        for platform in self.platforms:
+        for platform in self.game_state.platforms:
             platform.draw(self.screen, self.camera_offset)
 
         for coin in self.game_state.map_coins:

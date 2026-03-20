@@ -121,22 +121,247 @@ class AttackData:
     }
 
 
-# Platforms: (x, y, width, height)
-STAGE_PLATFORMS = [
-    # Main platform (ground)
-    (240, 550, 800, 40),
-    
-    # Side platforms
-    (100, 420, 200, 25),
-    (980, 420, 200, 25),
-    
-    # Top platforms
-    (340, 300, 180, 25),
-    (760, 300, 180, 25),
-    
-    # Center top platform
-    (540, 180, 200, 25),
+def _make_stage_theme(
+    sky_top,
+    sky_bottom,
+    haze,
+    glow,
+    sun,
+    silhouette,
+    platform_color,
+    accent,
+):
+    return {
+        "sky_top": sky_top,
+        "sky_bottom": sky_bottom,
+        "haze": haze,
+        "glow": glow,
+        "sun": sun,
+        "silhouette": silhouette,
+        "platform_color": platform_color,
+        "accent": accent,
+    }
+
+
+def _spawn_on_platform(platform, y_offset=10):
+    x, y, width, _ = platform
+    return (
+        int(x + ((width - CharacterStats.WIDTH) / 2)),
+        int(y - CharacterStats.HEIGHT - y_offset),
+    )
+
+
+SKY_RUINS_PLATFORMS = [
+    (80, 590, 300, 30),
+    (450, 590, 380, 30),
+    (900, 590, 300, 30),
+    (180, 430, 180, 22),
+    (920, 430, 180, 22),
+    (550, 300, 180, 20),
 ]
+
+TWIN_FORGE_PLATFORMS = [
+    (110, 585, 240, 30),
+    (930, 585, 240, 30),
+    (435, 520, 410, 26),
+    (250, 385, 190, 22),
+    (840, 385, 190, 22),
+    (545, 260, 190, 20),
+    (80, 260, 140, 18),
+    (1060, 260, 140, 18),
+]
+
+CROSSWIND_DECK_PLATFORMS = [
+    (120, 560, 220, 26),
+    (380, 500, 180, 22),
+    (610, 410, 200, 20),
+    (870, 300, 190, 20),
+    (1030, 190, 140, 18),
+    (250, 330, 120, 18),
+]
+
+CRIMSON_STEPS_PLATFORMS = [
+    (60, 600, 250, 28),
+    (360, 520, 220, 24),
+    (620, 440, 220, 24),
+    (890, 360, 220, 24),
+    (170, 390, 170, 20),
+    (500, 300, 170, 20),
+    (980, 520, 170, 20),
+]
+
+NEBULA_SPINE_PLATFORMS = [
+    (260, 610, 240, 24),
+    (780, 610, 240, 24),
+    (545, 560, 190, 24),
+    (390, 445, 120, 20),
+    (770, 445, 120, 20),
+    (560, 340, 160, 20),
+    (435, 225, 110, 18),
+    (735, 225, 110, 18),
+    (590, 115, 100, 16),
+]
+
+ECLIPSE_THRONE_PLATFORMS = [
+    (350, 600, 580, 30),
+    (120, 500, 220, 22),
+    (940, 500, 220, 22),
+    (255, 360, 190, 20),
+    (835, 360, 190, 20),
+    (525, 255, 230, 22),
+    (560, 135, 160, 18),
+    (595, 60, 90, 14),
+]
+
+
+ROUND_STAGE_LAYOUTS = [
+    {
+        "id": "sky_ruins",
+        "name": "Sky Ruins",
+        "background_path": "assets/backgrounds/Round 1.png",
+        "platforms": SKY_RUINS_PLATFORMS,
+        "spawn_positions": [
+            _spawn_on_platform(SKY_RUINS_PLATFORMS[0]),
+            _spawn_on_platform(SKY_RUINS_PLATFORMS[2]),
+            _spawn_on_platform(SKY_RUINS_PLATFORMS[3]),
+            _spawn_on_platform(SKY_RUINS_PLATFORMS[4]),
+        ],
+        "theme": _make_stage_theme(
+            (68, 104, 150),
+            (188, 214, 255),
+            (214, 237, 255),
+            (255, 245, 214),
+            (255, 235, 160),
+            (60, 80, 110),
+            (122, 94, 63),
+            (255, 224, 122),
+        ),
+    },
+    {
+        "id": "twin_forge",
+        "name": "Twin Forge",
+        "background_path": "assets/backgrounds/Round 2.png",
+        "platforms": TWIN_FORGE_PLATFORMS,
+        "spawn_positions": [
+            _spawn_on_platform(TWIN_FORGE_PLATFORMS[0]),
+            _spawn_on_platform(TWIN_FORGE_PLATFORMS[1]),
+            _spawn_on_platform(TWIN_FORGE_PLATFORMS[3]),
+            _spawn_on_platform(TWIN_FORGE_PLATFORMS[4]),
+        ],
+        "theme": _make_stage_theme(
+            (88, 36, 26),
+            (230, 120, 78),
+            (255, 170, 96),
+            (255, 206, 140),
+            (255, 195, 78),
+            (73, 29, 22),
+            (90, 124, 145),
+            (255, 228, 128),
+        ),
+    },
+    {
+        "id": "crosswind_deck",
+        "name": "Crosswind Deck",
+        "background_path": "assets/backgrounds/Round 3.png",
+        "platforms": CROSSWIND_DECK_PLATFORMS,
+        "spawn_positions": [
+            (206, 486),
+            (446, 426),
+            (686, 336),
+            (286, 256),
+        ],
+        "theme": _make_stage_theme(
+            (24, 64, 94),
+            (111, 190, 214),
+            (185, 229, 238),
+            (198, 255, 250),
+            (155, 248, 255),
+            (22, 55, 74),
+            (78, 118, 101),
+            (164, 249, 255),
+        ),
+    },
+    {
+        "id": "crimson_steps",
+        "name": "Crimson Steps",
+        "background_path": "assets/backgrounds/Round 4 (Make sure good size).png",
+        "platforms": CRIMSON_STEPS_PLATFORMS,
+        "spawn_positions": [
+            _spawn_on_platform(CRIMSON_STEPS_PLATFORMS[0]),
+            _spawn_on_platform(CRIMSON_STEPS_PLATFORMS[1]),
+            _spawn_on_platform(CRIMSON_STEPS_PLATFORMS[2]),
+            _spawn_on_platform(CRIMSON_STEPS_PLATFORMS[3]),
+        ],
+        "theme": _make_stage_theme(
+            (54, 26, 46),
+            (172, 78, 118),
+            (238, 154, 173),
+            (255, 182, 196),
+            (255, 214, 176),
+            (56, 25, 44),
+            (74, 97, 132),
+            (255, 221, 154),
+        ),
+    },
+    {
+        "id": "nebula_spine",
+        "name": "Nebula Spine",
+        "background_path": "assets/backgrounds/Round 5.png",
+        "platforms": NEBULA_SPINE_PLATFORMS,
+        "spawn_positions": [
+            _spawn_on_platform(NEBULA_SPINE_PLATFORMS[0]),
+            _spawn_on_platform(NEBULA_SPINE_PLATFORMS[1]),
+            _spawn_on_platform(NEBULA_SPINE_PLATFORMS[3]),
+            _spawn_on_platform(NEBULA_SPINE_PLATFORMS[4]),
+        ],
+        "theme": _make_stage_theme(
+            (19, 22, 64),
+            (84, 84, 176),
+            (168, 155, 255),
+            (180, 234, 255),
+            (159, 194, 255),
+            (30, 23, 73),
+            (108, 90, 118),
+            (196, 233, 255),
+        ),
+    },
+]
+
+FINAL_ROUND_STAGE = {
+    "id": "eclipse_throne",
+    "name": "Eclipse Throne",
+    "background_path": "assets/backgrounds/Final Round.png",
+    "platforms": ECLIPSE_THRONE_PLATFORMS,
+    "spawn_positions": [
+        _spawn_on_platform(ECLIPSE_THRONE_PLATFORMS[1]),
+        _spawn_on_platform(ECLIPSE_THRONE_PLATFORMS[2]),
+        _spawn_on_platform(ECLIPSE_THRONE_PLATFORMS[3]),
+        _spawn_on_platform(ECLIPSE_THRONE_PLATFORMS[4]),
+    ],
+    "theme": _make_stage_theme(
+        (14, 10, 32),
+        (78, 42, 82),
+        (178, 95, 98),
+        (255, 175, 122),
+        (255, 214, 134),
+        (23, 14, 37),
+        (146, 84, 95),
+        (255, 224, 150),
+    ),
+}
+
+
+def get_stage_definition(round_number, is_final_round=False):
+    if is_final_round:
+        return FINAL_ROUND_STAGE
+
+    index = max(0, int(round_number) - 1)
+    if not ROUND_STAGE_LAYOUTS:
+        return FINAL_ROUND_STAGE
+    return ROUND_STAGE_LAYOUTS[index % len(ROUND_STAGE_LAYOUTS)]
+
+
+STAGE_PLATFORMS = get_stage_definition(1)["platforms"]
 
 # Kill boundaries (als speler hier buiten komt = dood)
 KILL_BOUNDARY = {
@@ -147,12 +372,7 @@ KILL_BOUNDARY = {
 }
 
 # Spawn positions voor spelers
-SPAWN_POSITIONS = [
-    (400, 450),   # Player 1
-    (880, 450),   # Player 2
-    (300, 200),   # Player 3
-    (980, 200),   # Player 4
-]
+SPAWN_POSITIONS = get_stage_definition(1)["spawn_positions"]
 
 
 # Sprite sheet configuratie

@@ -32,6 +32,7 @@ from config import (
     STAT_POINT_BUDGET,
     STAT_SELECT_SECONDS,
     ULTIMATE_SHOP_INDEX,
+    get_stage_definition,
 )
 
 
@@ -63,7 +64,6 @@ class GameState:
 
     def __init__(self):
         self.players: Dict[int, PlayerData] = {}
-        self.platforms: List[Platform] = self._create_platforms()
         self.phase: str = "lobby"
         self.round_number: int = 1
         self.winner: Optional[int] = None
@@ -82,12 +82,38 @@ class GameState:
         self.preliminary_round_duration: int = PRELIMINARY_ROUND_DURATION
         self.final_round_stocks: int = FINAL_ROUND_STOCKS
         self.is_final_round: bool = False
+        self.current_stage_id: str = ""
+        self.current_stage_name: str = ""
+        self.current_stage_background_path: Optional[str] = None
+        self.current_stage_theme: Dict[str, Any] = {}
+        self.spawn_positions: List[tuple[int, int]] = list(SPAWN_POSITIONS)
+        self.platforms: List[Platform] = []
         self.map_coins: List[CoinPickup] = []
         self.coin_spawn_timer: int = 0
         self.next_coin_id: int = 1
+        self._refresh_stage_layout()
 
-    def _create_platforms(self) -> List[Platform]:
-        return [Platform.from_tuple(p) for p in STAGE_PLATFORMS]
+    def _create_platforms(self, stage_definition: Optional[Dict[str, Any]] = None) -> List[Platform]:
+        stage_definition = stage_definition or get_stage_definition(self.round_number, self.is_final_round)
+        theme = stage_definition.get("theme", {})
+        platform_color = theme.get("platform_color")
+        platform_data = stage_definition.get("platforms", STAGE_PLATFORMS)
+        return [
+            Platform(platform[0], platform[1], platform[2], platform[3], color=platform_color)
+            for platform in platform_data
+        ]
+
+    def _refresh_stage_layout(self) -> None:
+        stage_definition = get_stage_definition(self.round_number, self.is_final_round)
+        self.current_stage_id = stage_definition.get("id", "default_stage")
+        self.current_stage_name = stage_definition.get("name", f"Round {self.round_number}")
+        self.current_stage_background_path = stage_definition.get("background_path")
+        self.current_stage_theme = dict(stage_definition.get("theme", {}))
+        self.spawn_positions = [
+            (int(position[0]), int(position[1]))
+            for position in stage_definition.get("spawn_positions", SPAWN_POSITIONS)
+        ]
+        self.platforms = self._create_platforms(stage_definition)
 
     def active_player_count(self) -> int:
         return len(self.get_connected_players())
@@ -169,6 +195,7 @@ class GameState:
         self.winner = None
         self.game_timer = 0
         self.is_final_round = False
+        self._refresh_stage_layout()
         self.stocks_per_player = INFINITE_STOCKS
         self.stat_select_remaining_frames = self.stat_select_total_frames
         self.upgrade_shop_remaining_frames = 0
@@ -195,12 +222,14 @@ class GameState:
         self.round_end_remaining_frames = 0
         self.pending_round_transition = None
         self.is_final_round = False
+        self._refresh_stage_layout()
         self.stocks_per_player = INFINITE_STOCKS
         self._reset_map_coins()
 
         for i, player in enumerate(self.get_connected_players()):
-            spawn = SPAWN_POSITIONS[i % len(SPAWN_POSITIONS)]
+            spawn = self.spawn_positions[i % len(self.spawn_positions)]
             player.character = Warrior(spawn[0], spawn[1], player.player_id)
+            player.character.set_respawn_position(spawn[0], spawn[1])
             self._apply_player_build_to_character(player)
             player.character.stocks = self.stocks_per_player
             player.character.jumps_remaining = player.character.max_jumps
@@ -286,6 +315,7 @@ class GameState:
         self.winner = None
         self.game_timer = 0
         self.round_end_remaining_frames = 0
+        self._refresh_stage_layout()
         self._reset_map_coins()
 
         for i, player in enumerate(self.get_connected_players()):
@@ -294,7 +324,8 @@ class GameState:
 
             player.ready = False
             self._apply_player_build_to_character(player)
-            spawn = SPAWN_POSITIONS[i % len(SPAWN_POSITIONS)]
+            spawn = self.spawn_positions[i % len(self.spawn_positions)]
+            player.character.set_respawn_position(spawn[0], spawn[1])
             player.character.x = spawn[0]
             player.character.y = spawn[1]
             player.character.vel_x = 0
@@ -559,6 +590,9 @@ class GameState:
             "preliminary_rounds": self.preliminary_rounds,
             "preliminary_round_duration": self.preliminary_round_duration,
             "final_round_stocks": self.final_round_stocks,
+            "current_stage_id": self.current_stage_id,
+            "current_stage_name": self.current_stage_name,
+            "current_stage_background_path": self.current_stage_background_path,
             "players": {
                 pid: {
                     "player_id": player.player_id,
@@ -594,6 +628,11 @@ class GameState:
         self.preliminary_rounds = data.get("preliminary_rounds", PRELIMINARY_ROUNDS)
         self.preliminary_round_duration = data.get("preliminary_round_duration", PRELIMINARY_ROUND_DURATION)
         self.final_round_stocks = data.get("final_round_stocks", FINAL_ROUND_STOCKS)
+        self._refresh_stage_layout()
+        self.current_stage_background_path = data.get(
+            "current_stage_background_path",
+            self.current_stage_background_path,
+        )
         self.stocks_per_player = self.final_round_stocks if self.is_final_round else INFINITE_STOCKS
         self.map_coins = [CoinPickup.from_dict(coin_data) for coin_data in data.get("map_coins", [])]
         self.coin_spawn_timer = data.get("coin_spawn_timer", 0)
