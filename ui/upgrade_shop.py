@@ -1,8 +1,36 @@
+import os
+
 import pygame
 
 from config import BUILD_STAT_NAMES, Colors, SCREEN_HEIGHT, SCREEN_WIDTH, ULTIMATE_SHOP_ITEMS
-from ui.character_select import STAT_DISPLAY, _load_tinted_icon
+from ui.character_select import STAT_DISPLAY, _load_tinted_icon, _resolve_asset_path
 from ui.title_text import get_ui_font, render_fit_text
+
+
+ULTIMATE_ICON_FILES = {
+    "teleportation": "teleport.png",
+    "fireball": "fireball.png",
+    "invisibility": "Invisibility.png",
+    "grab": "Grab.png",
+    "parry_counter": "parry.png",
+}
+
+
+def _load_ultimate_icon(ultimate_id, size=48):
+    icon_filename = ULTIMATE_ICON_FILES.get(ultimate_id)
+    if not icon_filename:
+        return None
+
+    full_path = _resolve_asset_path("assets", "Icons", icon_filename)
+    if not os.path.exists(full_path):
+        return None
+
+    try:
+        icon = pygame.image.load(full_path).convert_alpha()
+    except pygame.error:
+        return None
+
+    return pygame.transform.smoothscale(icon, (size, size))
 
 
 def _lighten(color, factor=0.35):
@@ -90,13 +118,14 @@ class StatUpgradeCard:
 
 class UltimateOfferCard:
 
-    def __init__(self, offer, x, y, width=520, height=86):
+    def __init__(self, offer, x, y, width=520, height=94):
         self.offer = offer
         self.rect = pygame.Rect(x, y, width, height)
-        self.button_rect = pygame.Rect(x + width - 118, y + 20, 92, 46)
+        self.button_rect = pygame.Rect(x + width - 116, y + 22, 92, 42)
         self.title_font = get_ui_font(20)
         self.font = get_ui_font(15)
         self.small_font = get_ui_font(14)
+        self.icon = _load_ultimate_icon(offer["id"], size=50)
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -113,15 +142,24 @@ class UltimateOfferCard:
         border_color = Colors.ORANGE if selected else (88, 94, 110)
         pygame.draw.rect(screen, border_color, self.rect, 3 if selected else 2, border_radius=16)
 
-        title = render_fit_text(self.offer["name"], Colors.WHITE, 300, 20, 12)
-        screen.blit(title, (self.rect.left + 18, self.rect.top + 12))
+        icon_rect = pygame.Rect(self.rect.left + 16, self.rect.top + 22, 50, 50)
+        if self.icon:
+            screen.blit(self.icon, icon_rect)
+        else:
+            pygame.draw.rect(screen, Colors.ORANGE, icon_rect, border_radius=12)
+
+        text_left = icon_rect.right + 14
+        text_max_width = self.button_rect.left - text_left - 18
+
+        title = render_fit_text(self.offer["name"], Colors.WHITE, text_max_width, 20, 12)
+        screen.blit(title, (text_left, self.rect.top + 12))
 
         meta = f"Ultimate | {self.offer['focus']} | {self.offer['cost']} coins"
-        meta_surface = render_fit_text(meta, Colors.ORANGE, 300, 14, 10)
-        screen.blit(meta_surface, (self.rect.left + 18, self.rect.top + 40))
+        meta_surface = render_fit_text(meta, Colors.ORANGE, text_max_width, 14, 10)
+        screen.blit(meta_surface, (text_left, self.rect.top + 38))
 
-        description = render_fit_text(self.offer["description"], Colors.LIGHT_GRAY, 300, 15, 10)
-        screen.blit(description, (self.rect.left + 18, self.rect.top + 60))
+        description = render_fit_text(self.offer["description"], Colors.LIGHT_GRAY, text_max_width, 14, 10)
+        screen.blit(description, (text_left, self.rect.top + 60))
 
         if equipped:
             button_text = "Equipped"
@@ -130,7 +168,7 @@ class UltimateOfferCard:
             button_text = "Equip"
             button_color = (74, 106, 152)
         else:
-            button_text = "Buy"
+            button_text = "Aquire"
             button_color = (184, 118, 54) if affordable else (80, 84, 92)
 
         pygame.draw.rect(screen, button_color, self.button_rect, border_radius=12)
