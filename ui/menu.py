@@ -12,6 +12,26 @@ except ImportError:
     Image = None
 
 
+def _render_outlined_text(font, text, text_color, outline_color=(0, 0, 0), outline_width=2):
+    base = font.render(text, True, text_color)
+    if outline_width <= 0:
+        return base
+
+    surface = pygame.Surface(
+        (base.get_width() + outline_width * 2, base.get_height() + outline_width * 2),
+        pygame.SRCALPHA,
+    )
+    outline = font.render(text, True, outline_color)
+    for offset_x in range(-outline_width, outline_width + 1):
+        for offset_y in range(-outline_width, outline_width + 1):
+            if offset_x == 0 and offset_y == 0:
+                continue
+            surface.blit(outline, (offset_x + outline_width, offset_y + outline_width))
+
+    surface.blit(base, (outline_width, outline_width))
+    return surface
+
+
 class Button:
 
     def __init__(self, x, y, width, height, text, callback=None, font_size=32):
@@ -33,7 +53,7 @@ class Button:
         pygame.draw.rect(screen, self.color_normal, self.rect, border_radius=12)
         border_color = Colors.ORANGE if self.selected else Colors.WHITE
         pygame.draw.rect(screen, border_color, self.rect, 3 if self.selected else 2, border_radius=12)
-        text_surface = self.font.render(self.text, True, Colors.WHITE)
+        text_surface = _render_outlined_text(self.font, self.text, Colors.WHITE, outline_width=2)
         screen.blit(text_surface, text_surface.get_rect(center=self.rect.center))
 
 
@@ -65,7 +85,7 @@ class TextInput:
 
         value = self.text if self.text else self.placeholder
         color = Colors.WHITE if self.text else Colors.GRAY
-        surface = self.font.render(value, True, color)
+        surface = _render_outlined_text(self.font, value, color, outline_width=2)
         screen.blit(surface, surface.get_rect(midleft=(self.rect.left + 12, self.rect.centery)))
 
 
@@ -86,7 +106,7 @@ class MainMenu:
         self.info_message = ""
 
         self.title_font = get_ui_font(118)
-        self.subtitle_font = get_ui_font(36)
+        self.subtitle_font = get_ui_font(32)
         self.body_font = get_ui_font(28)
         self.small_font = get_ui_font(22)
 
@@ -456,8 +476,6 @@ class MainMenu:
 
     def draw(self):
         self._draw_scene_background()
-        if self.state != "welcome":
-            self._draw_background_panels()
         self._draw_title()
 
         if self.state == "welcome":
@@ -472,7 +490,7 @@ class MainMenu:
             self._draw_host_waiting()
 
         if self.error_message:
-            surface = self.body_font.render(self.error_message, True, Colors.RED)
+            surface = _render_outlined_text(self.body_font, self.error_message, Colors.RED, outline_width=2)
             self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 32)))
 
     def _draw_scene_background(self):
@@ -503,37 +521,30 @@ class MainMenu:
         title_rect = scaled_surface.get_rect(center=(SCREEN_WIDTH // 2, title_y))
         self.screen.blit(scaled_surface, title_rect)
 
-    def _draw_background_panels(self):
-        panel = pygame.Rect(140, 170, SCREEN_WIDTH - 280, SCREEN_HEIGHT - 240)
-        panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
-        pygame.draw.rect(panel_surface, (20, 24, 34, 120), panel_surface.get_rect(), border_radius=28)
-        pygame.draw.rect(panel_surface, (155, 165, 202, 170), panel_surface.get_rect(), 2, border_radius=28)
-        self.screen.blit(panel_surface, panel.topleft)
-
     def _draw_welcome(self):
-        subtitle = self.subtitle_font.render("A fast arena fighter for your lobby", True, self.TITLE_ACCENT_COLOR)
+        subtitle = _render_outlined_text(self.subtitle_font, "A fast arena fighter for your lobby", self.TITLE_ACCENT_COLOR, outline_width=2)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 6)))
-        prompt = self.body_font.render("Press ENTER to start", True, self.TITLE_ACCENT_COLOR)
+        prompt = _render_outlined_text(self.body_font, "Press ENTER to start", self.TITLE_ACCENT_COLOR, outline_width=2)
         self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 44)))
 
     def _draw_mode_select(self):
-        subtitle = self.subtitle_font.render("Choose how you want to open the lobby", True, self.TITLE_ACCENT_COLOR)
+        subtitle = _render_outlined_text(self.subtitle_font, "Choose how you want to open the lobby", self.TITLE_ACCENT_COLOR, outline_width=2)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
         for button in self.mode_buttons:
             button.draw(self.screen)
 
     def _draw_host_setup(self):
-        label = self.subtitle_font.render("Start a host lobby", True, Colors.WHITE)
+        label = _render_outlined_text(self.subtitle_font, "Start a host lobby", Colors.WHITE, outline_width=2)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
-        hint = self.small_font.render("Only share your IP with the other player afterwards.", True, Colors.GRAY)
+        hint = _render_outlined_text(self.small_font, "Only share your IP with the other player afterwards.", Colors.GRAY, outline_width=2)
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 330)))
         for button in self.host_buttons:
             button.draw(self.screen)
 
     def _draw_join_setup(self):
-        label = self.subtitle_font.render("Join with host IP", True, Colors.WHITE)
+        label = _render_outlined_text(self.subtitle_font, "Join with host IP", Colors.WHITE, outline_width=2)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
         self.join_ip_input.draw(self.screen)
@@ -544,11 +555,16 @@ class MainMenu:
         self.username_input.draw(self.screen)
 
     def _draw_host_waiting(self):
-        label = self.subtitle_font.render("Lobby open", True, Colors.WHITE)
+        label = _render_outlined_text(self.subtitle_font, "Lobby open", Colors.WHITE, outline_width=2)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
-        info = self.body_font.render(self.info_message, True, Colors.LIGHT_GRAY)
+        info = _render_outlined_text(self.body_font, self.info_message, Colors.LIGHT_GRAY, outline_width=2)
         self.screen.blit(info, info.get_rect(center=(SCREEN_WIDTH // 2, 300)))
-        hint = self.body_font.render("As soon as at least 2 players join, the 30s stat phase starts automatically.", True, Colors.WHITE)
+        hint = _render_outlined_text(
+            self.body_font,
+            "As soon as at least 2 players join, the 30s stat phase starts automatically.",
+            Colors.WHITE,
+            outline_width=2,
+        )
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 352)))
         for button in self.wait_buttons:
             button.draw(self.screen)
