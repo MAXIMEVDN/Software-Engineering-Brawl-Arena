@@ -1,9 +1,10 @@
 import os
+import math
 
 import pygame
 
 from config import Colors, SCREEN_WIDTH, SCREEN_HEIGHT
-from ui.title_text import get_ui_font
+from ui.title_text import draw_title_style_text, get_title_style_font, get_ui_font
 
 try:
     from PIL import Image
@@ -75,6 +76,7 @@ class MainMenu:
     KNIGHT_GIF_PATH = "assets/sprites/homepage knight gif/14693.gif"
     KNIGHT_FRAME_DIR = "assets/sprites/homepage knight gif/14693"
     TITLE_ACCENT_COLOR = (247, 233, 214)
+    TITLE_MAIN_COLOR = (236, 214, 156)
 
     def __init__(self, screen):
         self.screen = screen
@@ -83,19 +85,21 @@ class MainMenu:
         self.error_message = ""
         self.info_message = ""
 
-        self.title_font = get_ui_font(88)
+        self.title_font = get_ui_font(118)
         self.subtitle_font = get_ui_font(36)
         self.body_font = get_ui_font(28)
         self.small_font = get_ui_font(22)
 
         self.username_input = TextInput(SCREEN_WIDTH // 2, 272, 280, 44, "Username", font_size=26)
-        self.join_ip_input = TextInput(SCREEN_WIDTH // 2, 360, 360, 48, "Host IP (bijv. 192.168.1.42)")
+        self.join_ip_input = TextInput(SCREEN_WIDTH // 2, 360, 360, 48, "Host IP (e.g. 192.168.1.42)")
         self.background = self._load_background(self.MENU_BG_PATH)
         self.title_image = self._load_title_image()
         self.knight_frames = self._load_knight_frames()
         self.knight_frame_index = 0
         self.knight_frame_timer = 0
         self.knight_frame_duration = 10
+        self.title_pulse_timer = 0.0
+        self._title_base_surface = None
         self.selected_index = 0
 
         self._create_buttons()
@@ -174,6 +178,28 @@ class MainMenu:
             max(1, int(title_surface.get_height() * scale)),
         )
         return pygame.transform.scale(title_surface, scaled_size)
+
+    def _get_title_surface(self):
+        if self._title_base_surface is not None:
+            return self._title_base_surface
+
+        font = get_title_style_font(118)
+        text_width, text_height = font.size("Brawl Arena")
+        padding = 24
+        surface = pygame.Surface((text_width + padding * 2, text_height + padding * 2), pygame.SRCALPHA)
+        draw_title_style_text(
+            surface,
+            "Brawl Arena",
+            (surface.get_width() // 2, surface.get_height() // 2),
+            118,
+            text_color=self.TITLE_MAIN_COLOR,
+            shadow_color=(18, 24, 38),
+            outline_color=(0, 0, 0),
+            shadow_offset=(5, 5),
+            outline_width=3,
+        )
+        self._title_base_surface = surface
+        return surface
 
     def _load_frames_from_directory(self, directory_path):
         if not os.path.isdir(directory_path):
@@ -256,7 +282,7 @@ class MainMenu:
     def _on_join_lobby(self):
         ip = self.join_ip_input.text.strip()
         if not ip:
-            self.error_message = "Voer het host IP in."
+            self.error_message = "Enter the host IP."
             return
         self.result = {"action": "join", "ip": ip, "username": self.username_input.text.strip()}
 
@@ -278,6 +304,8 @@ class MainMenu:
         self.error_message = message
 
     def animate(self):
+        self.title_pulse_timer += 0.03
+
         if len(self.knight_frames) <= 1:
             return
 
@@ -463,16 +491,17 @@ class MainMenu:
             self.screen.blit(knight, knight_rect)
 
     def _draw_title(self):
-        title_position = (SCREEN_WIDTH // 2, 118)
-        if self.title_image:
-            title_rect = self.title_image.get_rect(center=title_position)
-            self.screen.blit(self.title_image, title_rect)
-            return
+        pulse_scale = 1.0
+        if self.state == "welcome":
+            pulse_scale += 0.03 * math.sin(self.title_pulse_timer)
 
-        title_shadow = self.title_font.render("Brawl Arena", True, (18, 24, 38))
-        title = self.title_font.render("Brawl Arena", True, Colors.WHITE)
-        self.screen.blit(title_shadow, title_shadow.get_rect(center=(title_position[0] + 3, title_position[1] + 3)))
-        self.screen.blit(title, title.get_rect(center=title_position))
+        title_y = SCREEN_HEIGHT // 2 - 90 if self.state == "welcome" else 118
+        title_surface = self._get_title_surface()
+        scaled_width = max(1, int(title_surface.get_width() * pulse_scale))
+        scaled_height = max(1, int(title_surface.get_height() * pulse_scale))
+        scaled_surface = pygame.transform.smoothscale(title_surface, (scaled_width, scaled_height))
+        title_rect = scaled_surface.get_rect(center=(SCREEN_WIDTH // 2, title_y))
+        self.screen.blit(scaled_surface, title_rect)
 
     def _draw_background_panels(self):
         panel = pygame.Rect(140, 170, SCREEN_WIDTH - 280, SCREEN_HEIGHT - 240)
@@ -482,29 +511,29 @@ class MainMenu:
         self.screen.blit(panel_surface, panel.topleft)
 
     def _draw_welcome(self):
-        subtitle = self.subtitle_font.render("Een snelle arena fighter voor jullie lobby", True, self.TITLE_ACCENT_COLOR)
-        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 200)))
+        subtitle = self.subtitle_font.render("A fast arena fighter for your lobby", True, self.TITLE_ACCENT_COLOR)
+        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 6)))
         prompt = self.body_font.render("Press ENTER to start", True, self.TITLE_ACCENT_COLOR)
-        self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, 238)))
+        self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 44)))
 
     def _draw_mode_select(self):
-        subtitle = self.subtitle_font.render("Kies hoe je de lobby wilt openen", True, self.TITLE_ACCENT_COLOR)
+        subtitle = self.subtitle_font.render("Choose how you want to open the lobby", True, self.TITLE_ACCENT_COLOR)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
         for button in self.mode_buttons:
             button.draw(self.screen)
 
     def _draw_host_setup(self):
-        label = self.subtitle_font.render("Start een host lobby", True, Colors.WHITE)
+        label = self.subtitle_font.render("Start a host lobby", True, Colors.WHITE)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
-        hint = self.small_font.render("Deel daarna alleen jouw IP met de andere speler.", True, Colors.GRAY)
+        hint = self.small_font.render("Only share your IP with the other player afterwards.", True, Colors.GRAY)
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 330)))
         for button in self.host_buttons:
             button.draw(self.screen)
 
     def _draw_join_setup(self):
-        label = self.subtitle_font.render("Join met host IP", True, Colors.WHITE)
+        label = self.subtitle_font.render("Join with host IP", True, Colors.WHITE)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
         self.join_ip_input.draw(self.screen)
@@ -515,11 +544,11 @@ class MainMenu:
         self.username_input.draw(self.screen)
 
     def _draw_host_waiting(self):
-        label = self.subtitle_font.render("Lobby geopend", True, Colors.WHITE)
+        label = self.subtitle_font.render("Lobby open", True, Colors.WHITE)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         info = self.body_font.render(self.info_message, True, Colors.LIGHT_GRAY)
         self.screen.blit(info, info.get_rect(center=(SCREEN_WIDTH // 2, 300)))
-        hint = self.body_font.render("Zodra minstens 2 spelers binnen zijn begint de 30s statfase automatisch.", True, Colors.WHITE)
+        hint = self.body_font.render("As soon as at least 2 players join, the 30s stat phase starts automatically.", True, Colors.WHITE)
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 352)))
         for button in self.wait_buttons:
             button.draw(self.screen)

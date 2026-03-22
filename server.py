@@ -95,13 +95,13 @@ class GameServer:
         try:
             self.socket.bind((ip, port))
         except socket.error as exc:
-            print(f"Kon niet binden aan port {port}: {exc}")
+            print(f"Could not bind to port {port}: {exc}")
             sys.exit(1)
 
         self.socket.listen(MAX_PLAYERS)
         self.game_thread = threading.Thread(target=self._game_loop, daemon=True)
 
-        print(f"Server gestart op port {port}")
+        print(f"Server started on port {port}")
 
     def start(self) -> None:
         self.game_thread.start()
@@ -109,12 +109,12 @@ class GameServer:
         while self.running:
             try:
                 conn, addr = self.socket.accept()
-                print(f"Nieuwe verbinding van {addr}")
+                print(f"New connection from {addr}")
                 player_id = self._perform_handshake(conn)
                 if player_id is None:
                     conn.close()
                     continue
-                print(f"Speler {player_id} toegelaten tot lobby")
+                print(f"Player {player_id} admitted to the lobby")
                 start_new_thread(self._handle_client, (conn, player_id))
             except socket.error as exc:
                 if self.running:
@@ -130,17 +130,17 @@ class GameServer:
             data = conn.recv(BUFFER_SIZE)
             message = pickle.loads(data)
             if message.get("type") != "join_lobby":
-                conn.sendall(pickle.dumps({"ok": False, "error": "Ongeldige lobby handshake"}))
+                conn.sendall(pickle.dumps({"ok": False, "error": "Invalid lobby handshake"}))
                 return None
 
             with self.state_lock:
                 if self.game_state.phase != "lobby":
-                    conn.sendall(pickle.dumps({"ok": False, "error": "Lobby accepteert geen nieuwe spelers"}))
+                    conn.sendall(pickle.dumps({"ok": False, "error": "Lobby is not accepting new players"}))
                     return None
 
                 player_id = self.game_state.add_player()
                 if player_id is None:
-                    conn.sendall(pickle.dumps({"ok": False, "error": "Lobby zit vol"}))
+                    conn.sendall(pickle.dumps({"ok": False, "error": "Lobby is full"}))
                     return None
 
                 username = str(message.get("username", "")).strip()
@@ -161,7 +161,7 @@ class GameServer:
 
             return player_id
         except Exception as exc:
-            print(f"Handshake mislukt: {exc}")
+            print(f"Handshake failed: {exc}")
             return None
 
     def _handle_client(self, conn: socket.socket, player_id: int) -> None:
@@ -177,7 +177,7 @@ class GameServer:
             except socket.error:
                 break
             except Exception as exc:
-                print(f"Error voor speler {player_id}: {exc}")
+                print(f"Error for player {player_id}: {exc}")
                 break
 
         with self.state_lock:

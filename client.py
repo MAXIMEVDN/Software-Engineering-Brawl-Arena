@@ -508,7 +508,7 @@ class Game:
                     creationflags=creation_flags,
                 )
             except Exception as exc:
-                self.menu.set_error(f"Kon server niet starten: {exc}")
+                self.menu.set_error(f"Could not start server: {exc}")
                 self.server_process = None
                 return
 
@@ -521,7 +521,7 @@ class Game:
                 return
             time.sleep(0.25)
 
-        self.menu.set_error("Kon niet verbinden met de lokale lobby.")
+        self.menu.set_error("Could not connect to the local lobby.")
         self.network = None
 
     def _join_lobby(self, ip):
@@ -531,7 +531,7 @@ class Game:
             self.menu.set_waiting_view(len(self.game_state.get_connected_players()), ip)
             self._sync_with_server(force=True)
         else:
-            self.menu.set_error("Kon niet joinen. Controleer het IP-adres.")
+            self.menu.set_error("Could not join. Check the IP address.")
             self.network = None
 
     def _update_screen_from_phase(self):

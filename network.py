@@ -1,5 +1,5 @@
 """
-Network module - Client-side netwerk communicatie.
+Network module - Client-side network communication.
 """
 
 import pickle
@@ -32,22 +32,22 @@ class Network:
             data = self.client.recv(BUFFER_SIZE)
             response = pickle.loads(data)
             if not response.get("ok"):
-                print(response.get("error", "Verbinding geweigerd"))
+                print(response.get("error", "Connection refused"))
                 self.client.close()
                 return False
 
             self.player_id = response["player_id"]
             self.connected = True
-            print(f"Verbonden met server als Player {self.player_id}")
+            print(f"Connected to server as Player {self.player_id}")
             return True
         except socket.timeout:
-            print("Verbinding timeout - server niet bereikbaar")
+            print("Connection timed out - server unreachable")
             return False
         except socket.error as exc:
-            print(f"Verbindingsfout: {exc}")
+            print(f"Connection error: {exc}")
             return False
         except Exception as exc:
-            print(f"Onverwachte fout bij verbinden: {exc}")
+            print(f"Unexpected error while connecting: {exc}")
             return False
 
     def send(self, data: Any) -> Optional[Any]:
@@ -60,14 +60,14 @@ class Network:
                 response = self.client.recv(BUFFER_SIZE)
                 return pickle.loads(response)
             except socket.timeout:
-                print("Timeout bij communicatie met server")
+                print("Timed out while communicating with the server")
                 return None
             except socket.error as exc:
                 print(f"Socket error: {exc}")
                 self.connected = False
                 return None
             except Exception as exc:
-                print(f"Fout bij verzenden: {exc}")
+                print(f"Error while sending data: {exc}")
                 return None
 
     def disconnect(self) -> None:

@@ -1231,15 +1231,10 @@ class BaseCharacter:
             pygame.draw.rect(screen, Colors.WHITE, (indicator_x, draw_y + 10, 10, 10))
 
         if self.ultimate_preview_active and self.teleport_glow_color:
-            glow_rect = pygame.Rect(draw_x - 10, draw_y - 10, self.width + 20, self.height + 20)
-            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-            glow_surface.fill((*self.teleport_glow_color, 60))
-            screen.blit(glow_surface, glow_rect.topleft)
-            pygame.draw.rect(screen, self.teleport_glow_color, glow_rect, 3, border_radius=12)
             preview_rect = self._get_teleport_preview_rect(camera_offset)
             if preview_rect:
                 pygame.draw.rect(screen, self.teleport_glow_color, preview_rect, 2, border_radius=10)
-        elif (self.ultimate_cast_timer > 0 or self.parry_active_timer > 0) and self.teleport_glow_color:
+        elif (self.parry_active_timer > 0 or self.casting_ultimate_id == "parry_counter") and self.teleport_glow_color:
             glow_rect = pygame.Rect(draw_x - 8, draw_y - 8, self.width + 16, self.height + 16)
             glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
             glow_surface.fill((*self.teleport_glow_color, 70))
