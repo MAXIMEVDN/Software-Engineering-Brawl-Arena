@@ -12,6 +12,7 @@ from ui.title_text import draw_title_style_text, get_ui_font, render_fit_text
 
 
 class HUD:
+    """Draws the in-match overlay such as damage, stocks and round info."""
 
     def __init__(self, screen):
         self.screen = screen
@@ -27,6 +28,7 @@ class HUD:
         ]
 
     def draw(self, characters, local_player_id=0, game_state=None):
+        """Render the full HUD for the current frame."""
         local_character = None
         for i, character in enumerate(characters):
             if i >= len(self.hud_positions):
@@ -45,6 +47,7 @@ class HUD:
             self._draw_ultimate_cooldown(local_character)
 
     def _draw_player_hud(self, character, pos, is_local, game_state):
+        """Draw the bottom HUD panel for one player."""
         x, y = pos
         color = character.color
 
@@ -70,6 +73,7 @@ class HUD:
         self._draw_stocks(x, y + 38, character.stocks, color)
 
     def _get_player_coins(self, player_id, game_state):
+        """Return a player's current coin count when game state is available."""
         if game_state is None:
             return 0
 
@@ -79,6 +83,7 @@ class HUD:
         return player.coins
 
     def _draw_stocks(self, x, y, stocks, color):
+        """Draw stock markers, or `INF` for endless lives."""
         if stocks < 0:
             text = self.font_medium.render("INF", True, color)
             self.screen.blit(text, text.get_rect(center=(x, y)))
@@ -93,6 +98,7 @@ class HUD:
             pygame.draw.circle(self.screen, Colors.WHITE, (stock_x, y), 4, 1)
 
     def _draw_match_info(self, game_state):
+        """Show the current round name, timer and stock mode."""
         if game_state.is_final_round:
             label = f"Final Round | Stocks: {game_state.final_round_stocks}"
         else:
@@ -106,6 +112,7 @@ class HUD:
         self.screen.blit(surface, (18, 42))
 
     def _draw_round_end_countdown(self, game_state):
+        """Show the last five seconds before a timed round expires."""
         if game_state.phase != "playing" or game_state.is_final_round:
             return
 
@@ -118,6 +125,7 @@ class HUD:
             self.draw_center_announcement(str(remaining_seconds), size=138)
 
     def _get_damage_color(self, damage):
+        """Convert damage percent into a warning color."""
         if damage < 50:
             return Colors.WHITE
         if damage < 100:
@@ -129,11 +137,13 @@ class HUD:
         return (255, 50, 50)
 
     def _draw_controls_hint(self):
+        """Render the static controls legend along the top edge."""
         controls = "WASD/Arrows Move  J Light  K Heavy  L Special  U Ultimate  Shift Dash"
         surface = render_fit_text(controls, Colors.GRAY, SCREEN_WIDTH - 40, 18, 12)
         self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, 18)))
 
     def _draw_ultimate_cooldown(self, character):
+        """Show the equipped ultimate and whether it is ready."""
         box_width = 208
         box_height = 68
         margin = 24
@@ -168,6 +178,7 @@ class HUD:
         self.screen.blit(status, (box_rect.x + 10, box_rect.y + 36))
 
     def draw_winner(self, winner_name, winner_color):
+        """Show the winner overlay after game over."""
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 150))
         self.screen.blit(overlay, (0, 0))
@@ -186,6 +197,7 @@ class HUD:
         )
 
     def draw_waiting(self, player_count, ready_count):
+        """Draw a simple lobby status header with ready counts."""
         text = f"Players: {player_count}/4 | Ready: {ready_count}/{player_count}"
         surface = render_fit_text(text, Colors.WHITE, SCREEN_WIDTH - 40, 22, 14)
         self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, 50)))
@@ -194,6 +206,7 @@ class HUD:
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 80)))
 
     def draw_in_world_usernames(self, players, camera_offset=(0, 0)):
+        """Draw usernames above connected characters in world space."""
         for player in players:
             if not player.character or not player.connected:
                 continue
@@ -208,6 +221,7 @@ class HUD:
             self.screen.blit(surface, surface.get_rect(center=(cx, cy)))
 
     def draw_center_announcement(self, text, size=96):
+        """Render a large centered announcement overlay."""
         draw_title_style_text(
             self.screen,
             text,

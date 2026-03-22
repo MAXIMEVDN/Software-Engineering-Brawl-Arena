@@ -9,13 +9,13 @@ from entities.base_character import BaseCharacter
 
 
 class CollisionSystem:
+    """Resolves hit detection between characters and active attacks."""
 
     def __init__(self):
         self.hit_events = []    # Lijst van treffer-events (voor effects)
 
     def update(self, characters):
-        # Controleer alle actieve aanvallen op treffers.
-        # Geeft een lijst van treffer-events terug.
+        """Check every active attack/projectile and record hit events."""
         self.hit_events = []
 
         for attacker in characters:
@@ -29,11 +29,13 @@ class CollisionSystem:
         return self.hit_events
 
     def _check_attack_hits(self, attacker, all_characters):
+        """Check the attacker's active melee and projectile attacks for hits."""
         # Controleer of de aanval van attacker iemand raakt.
         attack = attacker.active_attack
         self._check_specific_attack_hits(attacker, attack, all_characters)
 
     def _check_specific_attack_hits(self, attacker, attack, all_characters):
+        """Check one specific attack object against all valid targets."""
         # Controleer of de opgegeven aanval van attacker iemand raakt.
         if not attack:
             return
@@ -55,7 +57,7 @@ class CollisionSystem:
                     break
 
     def _apply_hit(self, attacker, target, attack):
-        # Registreer de treffer en pas schade en knockback toe.
+        """Apply the gameplay result of one confirmed collision."""
         attack.register_hit(target.player_id)
         if target.try_parry_hit(attacker, attack):
             return
@@ -92,6 +94,7 @@ class CollisionSystem:
         self.hit_events.append(hit_event)
 
     def get_distance(self, char1, char2):
+        """Return the pixel distance between two character centers."""
         # Bereken de afstand in pixels tussen twee characters.
         dx = char1.x - char2.x
         dy = char1.y - char2.y

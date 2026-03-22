@@ -13,6 +13,7 @@ except ImportError:
 
 
 def _render_outlined_text(font, text, text_color, outline_color=(0, 0, 0), outline_width=2):
+    """Render text with a simple pixel-style outline for menu readability."""
     base = font.render(text, True, text_color)
     if outline_width <= 0:
         return base
@@ -33,8 +34,10 @@ def _render_outlined_text(font, text, text_color, outline_color=(0, 0, 0), outli
 
 
 class Button:
+    """Clickable menu button with mouse and keyboard selection styling."""
 
     def __init__(self, x, y, width, height, text, callback=None, font_size=32):
+        """Create one centered button with an optional callback."""
         self.rect = pygame.Rect(x - width // 2, y - height // 2, width, height)
         self.text = text
         self.callback = callback
@@ -43,6 +46,7 @@ class Button:
         self.color_normal = (70, 80, 90)
 
     def handle_event(self, event):
+        """Trigger the callback when the button is left-clicked."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.rect.collidepoint(event.pos):
             if self.callback:
                 self.callback()
@@ -50,6 +54,7 @@ class Button:
         return False
 
     def draw(self, screen):
+        """Draw the button background, border and label."""
         pygame.draw.rect(screen, self.color_normal, self.rect, border_radius=12)
         border_color = Colors.ORANGE if self.selected else Colors.WHITE
         pygame.draw.rect(screen, border_color, self.rect, 3 if self.selected else 2, border_radius=12)
@@ -58,8 +63,10 @@ class Button:
 
 
 class TextInput:
+    """Minimal text input field used by the lobby menu."""
 
     def __init__(self, x, y, width, height, placeholder="", font_size=28):
+        """Create one centered text field with placeholder text."""
         self.rect = pygame.Rect(x - width // 2, y - height // 2, width, height)
         self.text = ""
         self.placeholder = placeholder
@@ -68,6 +75,7 @@ class TextInput:
         self.font = get_ui_font(font_size)
 
     def handle_event(self, event):
+        """Update focus and typed text based on mouse and keyboard input."""
         if event.type == pygame.MOUSEBUTTONDOWN:
             self.active = self.rect.collidepoint(event.pos)
         elif event.type == pygame.KEYDOWN and self.active:
@@ -79,6 +87,7 @@ class TextInput:
                 self.text += event.unicode
 
     def draw(self, screen):
+        """Render the text field and either its value or placeholder."""
         border_color = Colors.ORANGE if self.selected else (Colors.WHITE if self.active else Colors.GRAY)
         pygame.draw.rect(screen, (32, 36, 44), self.rect, border_radius=8)
         pygame.draw.rect(screen, border_color, self.rect, 3 if self.selected else 2, border_radius=8)
@@ -90,22 +99,22 @@ class TextInput:
 
 
 class MainMenu:
+    """Drive the title screen, lobby setup views and waiting state."""
 
     MENU_BG_PATH = "assets/backgrounds/homepage background/Free-Mountain-Backgrounds-Pixel-Art5.png"
-    MENU_TITLE_PATH = "assets/backgrounds/homepage background/text-1773773015478.png"
     KNIGHT_GIF_PATH = "assets/sprites/homepage knight gif/14693.gif"
     KNIGHT_FRAME_DIR = "assets/sprites/homepage knight gif/14693"
     TITLE_ACCENT_COLOR = (247, 233, 214)
     TITLE_MAIN_COLOR = (236, 214, 156)
 
     def __init__(self, screen):
+        """Initialize menu state, assets and interactive controls."""
         self.screen = screen
         self.state = "welcome"
         self.result = None
         self.error_message = ""
         self.info_message = ""
 
-        self.title_font = get_ui_font(118)
         self.subtitle_font = get_ui_font(32)
         self.body_font = get_ui_font(28)
         self.small_font = get_ui_font(22)
@@ -113,7 +122,6 @@ class MainMenu:
         self.username_input = TextInput(SCREEN_WIDTH // 2, 272, 280, 44, "Username", font_size=26)
         self.join_ip_input = TextInput(SCREEN_WIDTH // 2, 360, 360, 48, "Host IP (e.g. 192.168.1.42)")
         self.background = self._load_background(self.MENU_BG_PATH)
-        self.title_image = self._load_title_image()
         self.knight_frames = self._load_knight_frames()
         self.knight_frame_index = 0
         self.knight_frame_timer = 0
@@ -126,6 +134,7 @@ class MainMenu:
         self._update_selection_state()
 
     def _create_buttons(self):
+        """Build the button groups used by each menu state."""
         center_x = SCREEN_WIDTH // 2
         self.mode_buttons = [
             Button(center_x, 330, 260, 56, "Host Game", self._show_host_setup),
@@ -148,10 +157,12 @@ class MainMenu:
         ]
 
     def _resolve_path(self, relative_path):
+        """Resolve an asset path relative to the project root."""
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(base_dir, relative_path)
 
     def _load_background(self, relative_path):
+        """Load and crop the menu background to the current screen size."""
         full_path = self._resolve_path(relative_path)
         if not os.path.exists(full_path):
             return None
@@ -177,29 +188,14 @@ class MainMenu:
         return scaled.subsurface((crop_x, crop_y, SCREEN_WIDTH, SCREEN_HEIGHT)).copy()
 
     def _load_single_surface(self, full_path):
+        """Load one image file as an alpha-enabled surface."""
         try:
             return pygame.image.load(full_path).convert_alpha()
         except pygame.error:
             return None
 
-    def _load_title_image(self):
-        full_path = self._resolve_path(self.MENU_TITLE_PATH)
-        if not os.path.exists(full_path):
-            return None
-
-        title_surface = self._load_single_surface(full_path)
-        if not title_surface:
-            return None
-
-        max_width = 520
-        scale = min(1.0, max_width / max(1, title_surface.get_width()))
-        scaled_size = (
-            max(1, int(title_surface.get_width() * scale)),
-            max(1, int(title_surface.get_height() * scale)),
-        )
-        return pygame.transform.scale(title_surface, scaled_size)
-
     def _get_title_surface(self):
+        """Cache the decorated title text so it only renders once."""
         if self._title_base_surface is not None:
             return self._title_base_surface
 
@@ -222,6 +218,7 @@ class MainMenu:
         return surface
 
     def _load_frames_from_directory(self, directory_path):
+        """Load animation frames from a directory of still images."""
         if not os.path.isdir(directory_path):
             return []
 
@@ -233,6 +230,7 @@ class MainMenu:
         return [frame for path in frame_paths if (frame := self._load_single_surface(path))]
 
     def _load_gif_frames(self, full_path):
+        """Extract all frames from a GIF when Pillow is available."""
         if Image is None or not os.path.exists(full_path):
             return []
 
@@ -250,6 +248,7 @@ class MainMenu:
         return frames
 
     def _load_knight_frames(self):
+        """Load and scale the knight animation shown on the menu background."""
         gif_full_path = self._resolve_path(self.KNIGHT_GIF_PATH)
         frame_dir = self._resolve_path(self.KNIGHT_FRAME_DIR)
 
@@ -273,6 +272,7 @@ class MainMenu:
         return scaled_frames
 
     def _show_host_setup(self):
+        """Switch from mode selection to the host setup form."""
         self.state = "host_setup"
         self.result = None
         self.error_message = ""
@@ -280,6 +280,7 @@ class MainMenu:
         self._update_selection_state()
 
     def _show_join_setup(self):
+        """Switch from mode selection to the join setup form."""
         self.state = "join_setup"
         self.result = None
         self.error_message = ""
@@ -288,6 +289,7 @@ class MainMenu:
         self._update_selection_state()
 
     def _on_back_to_mode(self):
+        """Return from a setup screen to the main mode selection state."""
         self.state = "mode_select"
         self.result = None
         self.error_message = ""
@@ -297,9 +299,11 @@ class MainMenu:
         self._update_selection_state()
 
     def _on_create_lobby(self):
+        """Queue a host-lobby action for the main client loop."""
         self.result = {"action": "host", "username": self.username_input.text.strip()}
 
     def _on_join_lobby(self):
+        """Queue a join request when the user entered a host IP."""
         ip = self.join_ip_input.text.strip()
         if not ip:
             self.error_message = "Enter the host IP."
@@ -307,12 +311,15 @@ class MainMenu:
         self.result = {"action": "join", "ip": ip, "username": self.username_input.text.strip()}
 
     def _on_local_game(self):
+        """Queue the action that starts a local offline match."""
         self.result = {"action": "local", "username": self.username_input.text.strip()}
 
     def _on_cancel_waiting(self):
+        """Queue a cancellation while the host is waiting in the lobby."""
         self.result = {"action": "cancel_waiting"}
 
     def set_waiting_view(self, player_count, host_ip=""):
+        """Show the waiting screen while a hosted lobby stays open."""
         self.state = "host_waiting"
         ip_part = f" | IP: {host_ip}" if host_ip else ""
         self.info_message = f"Lobby live{ip_part} | Players: {player_count}/4"
@@ -321,9 +328,11 @@ class MainMenu:
         self._update_selection_state()
 
     def set_error(self, message):
+        """Expose an error string for the next menu frame."""
         self.error_message = message
 
     def animate(self):
+        """Advance small menu animations such as the title pulse and knight loop."""
         self.title_pulse_timer += 0.03
 
         if len(self.knight_frames) <= 1:
@@ -335,6 +344,7 @@ class MainMenu:
             self.knight_frame_index = (self.knight_frame_index + 1) % len(self.knight_frames)
 
     def handle_event(self, event):
+        """Route input to the active menu state and its controls."""
         if event.type == pygame.MOUSEMOTION:
             self._sync_selection_from_mouse(event.pos)
 
@@ -369,6 +379,7 @@ class MainMenu:
                 button.handle_event(event)
 
     def _sync_selection_from_mouse(self, mouse_pos):
+        """Move keyboard selection to whichever control the mouse is hovering."""
         if self.state == "mode_select":
             for index, button in enumerate(self.mode_buttons):
                 if button.rect.collidepoint(mouse_pos):
@@ -401,6 +412,7 @@ class MainMenu:
         self._update_selection_state()
 
     def _handle_keyboard_navigation(self, event, button_count):
+        """Handle shared up/down/confirm navigation for simple button lists."""
         if event.type != pygame.KEYDOWN:
             return False
         if event.key in (pygame.K_w, pygame.K_UP, pygame.K_a, pygame.K_LEFT):
@@ -417,6 +429,7 @@ class MainMenu:
         return False
 
     def _handle_join_keyboard_navigation(self, event):
+        """Handle keyboard navigation for the join screen with an IP field."""
         if event.type != pygame.KEYDOWN:
             return False
 
@@ -443,6 +456,7 @@ class MainMenu:
         return False
 
     def _activate_selected(self):
+        """Invoke the currently selected control in the active menu state."""
         if self.state == "mode_select":
             self.mode_buttons[self.selected_index].callback()
         elif self.state == "host_setup":
@@ -451,6 +465,7 @@ class MainMenu:
             self.wait_buttons[self.selected_index].callback()
 
     def _update_selection_state(self):
+        """Refresh visual selection flags after navigation changes."""
         for button_group in (self.mode_buttons, self.host_buttons, self.join_buttons, self.wait_buttons):
             for button in button_group:
                 button.selected = False
@@ -470,11 +485,13 @@ class MainMenu:
             self.wait_buttons[self.selected_index % len(self.wait_buttons)].selected = True
 
     def update(self):
+        """Return the last queued menu action once, then clear it."""
         result = self.result
         self.result = None
         return result
 
     def draw(self):
+        """Render the current menu screen and any active error message."""
         self._draw_scene_background()
         self._draw_title()
 
@@ -494,6 +511,7 @@ class MainMenu:
             self.screen.blit(surface, surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 32)))
 
     def _draw_scene_background(self):
+        """Draw the menu backdrop, overlay and optional knight animation."""
         if self.background:
             self.screen.blit(self.background, (0, 0))
         else:
@@ -509,6 +527,7 @@ class MainMenu:
             self.screen.blit(knight, knight_rect)
 
     def _draw_title(self):
+        """Draw the stylized game title, including the welcome pulse effect."""
         pulse_scale = 1.0
         if self.state == "welcome":
             pulse_scale += 0.03 * math.sin(self.title_pulse_timer)
@@ -522,12 +541,14 @@ class MainMenu:
         self.screen.blit(scaled_surface, title_rect)
 
     def _draw_welcome(self):
+        """Render the initial welcome prompt before mode selection starts."""
         subtitle = _render_outlined_text(self.subtitle_font, "A fast arena fighter for your lobby", self.TITLE_ACCENT_COLOR, outline_width=2)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 6)))
         prompt = _render_outlined_text(self.body_font, "Press ENTER to start", self.TITLE_ACCENT_COLOR, outline_width=2)
         self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 44)))
 
     def _draw_mode_select(self):
+        """Draw the main menu options for host, join or local play."""
         subtitle = _render_outlined_text(self.subtitle_font, "Choose how you want to open the lobby", self.TITLE_ACCENT_COLOR, outline_width=2)
         self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
@@ -535,6 +556,7 @@ class MainMenu:
             button.draw(self.screen)
 
     def _draw_host_setup(self):
+        """Draw the host-creation screen and its helper text."""
         label = _render_outlined_text(self.subtitle_font, "Start a host lobby", Colors.WHITE, outline_width=2)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
@@ -544,6 +566,7 @@ class MainMenu:
             button.draw(self.screen)
 
     def _draw_join_setup(self):
+        """Draw the join screen with the host IP input."""
         label = _render_outlined_text(self.subtitle_font, "Join with host IP", Colors.WHITE, outline_width=2)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self._draw_username_field()
@@ -552,9 +575,11 @@ class MainMenu:
             button.draw(self.screen)
 
     def _draw_username_field(self):
+        """Render the reusable username input field."""
         self.username_input.draw(self.screen)
 
     def _draw_host_waiting(self):
+        """Draw the waiting screen shown while the host lobby is open."""
         label = _render_outlined_text(self.subtitle_font, "Lobby open", Colors.WHITE, outline_width=2)
         self.screen.blit(label, label.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         info = _render_outlined_text(self.body_font, self.info_message, Colors.LIGHT_GRAY, outline_width=2)

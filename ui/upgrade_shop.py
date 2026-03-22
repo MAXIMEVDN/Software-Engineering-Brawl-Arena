@@ -17,6 +17,7 @@ ULTIMATE_ICON_FILES = {
 
 
 def _load_ultimate_icon(ultimate_id, size=48):
+    """Load and scale the icon used for one ultimate shop offer."""
     icon_filename = ULTIMATE_ICON_FILES.get(ultimate_id)
     if not icon_filename:
         return None
@@ -34,12 +35,15 @@ def _load_ultimate_icon(ultimate_id, size=48):
 
 
 def _lighten(color, factor=0.35):
+    """Blend a color toward white for fills and highlights."""
     return tuple(min(255, int(channel + ((255 - channel) * factor))) for channel in color)
 
 
 class StatUpgradeCard:
+    """One shop row that upgrades or downgrades a build stat."""
 
     def __init__(self, stat_name, x, y, width=520, height=76):
+        """Create the UI geometry and cached assets for a stat row."""
         self.stat_name = stat_name
         self.meta = STAT_DISPLAY[stat_name]
         self.rect = pygame.Rect(x, y, width, height)
@@ -51,6 +55,7 @@ class StatUpgradeCard:
         self.icon = _load_tinted_icon(self.meta["icon"], self.meta["color"], size=40)
 
     def handle_event(self, event):
+        """Return which button was clicked on this stat card, if any."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.minus_rect.collidepoint(event.pos):
                 return "minus"
@@ -59,6 +64,7 @@ class StatUpgradeCard:
         return False
 
     def draw(self, screen, value, added_this_round, coins, selected=False, selected_button=None):
+        """Render the stat value, cost bar and plus/minus controls."""
         next_cost = value + 1
         previous_value = max(0, value - added_this_round)
         affordable = coins >= next_cost
@@ -117,8 +123,10 @@ class StatUpgradeCard:
 
 
 class UltimateOfferCard:
+    """Shop card that lets a player buy or equip one ultimate."""
 
     def __init__(self, offer, x, y, width=520, height=94):
+        """Create the UI geometry and icon cache for one ultimate offer."""
         self.offer = offer
         self.rect = pygame.Rect(x, y, width, height)
         self.button_rect = pygame.Rect(x + width - 116, y + 22, 92, 42)
@@ -128,12 +136,14 @@ class UltimateOfferCard:
         self.icon = _load_ultimate_icon(offer["id"], size=50)
 
     def handle_event(self, event):
+        """Return True when the offer button is clicked."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.button_rect.collidepoint(event.pos):
                 return True
         return False
 
     def draw(self, screen, player, selected=False):
+        """Render the ultimate offer and its current ownership state."""
         owned = self.offer["id"] in player.owned_ultimate_ids
         equipped = player.equipped_ultimate_id == self.offer["id"]
         affordable = player.coins >= self.offer["cost"]
@@ -178,8 +188,10 @@ class UltimateOfferCard:
 
 
 class RoundUpgradeShop:
+    """Drive the between-round shop where players spend coins."""
 
     def __init__(self, screen):
+        """Initialize fonts, selection state and all shop cards."""
         self.screen = screen
         self.title_font = get_ui_font(40)
         self.header_font = get_ui_font(22)
@@ -196,6 +208,7 @@ class RoundUpgradeShop:
         self._create_cards()
 
     def _create_cards(self):
+        """Create the left stat cards and right ultimate offer cards."""
         left_x = 56
         right_x = 704
         stat_y = 170
@@ -213,6 +226,7 @@ class RoundUpgradeShop:
         ]
 
     def handle_event(self, event, player):
+        """Translate mouse or keyboard input into one shop action."""
         if event.type == pygame.MOUSEMOTION:
             self._sync_selection_from_mouse(event.pos)
             return None
@@ -253,6 +267,7 @@ class RoundUpgradeShop:
         return None
 
     def _sync_selection_from_mouse(self, mouse_pos):
+        """Move selection to the card or button under the mouse cursor."""
         if self.ready_rect.collidepoint(mouse_pos):
             self.selected_section = "ready"
             return
@@ -281,6 +296,7 @@ class RoundUpgradeShop:
                 return
 
     def _handle_keyboard_navigation(self, event, player):
+        """Handle keyboard movement between stats, ultimates and ready button."""
         if event.key in (pygame.K_w, pygame.K_UP):
             if self.selected_section == "stats":
                 if self.selected_stat_index > 0:
@@ -365,6 +381,7 @@ class RoundUpgradeShop:
         return None
 
     def draw(self, player, remaining_seconds, current_round, upcoming_round, is_final_round, player_count, ready_count):
+        """Render the full upgrade shop, including footer and ready overlay."""
         self.screen.fill((26, 29, 36))
 
         title = self.title_font.render("ROUND UPGRADE SHOP", True, Colors.WHITE)

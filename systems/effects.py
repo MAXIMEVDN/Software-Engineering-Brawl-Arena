@@ -11,9 +11,10 @@ from config import Colors, EffectSettings
 
 
 class Particle:
-    # Een klein deeltje dat kort zichtbaar is na een treffer.
+    """Short-lived particle used for hit feedback effects."""
 
     def __init__(self, x, y, vel_x, vel_y, lifetime, color, size=4):
+        """Create one particle with position, velocity and fade lifetime."""
         self.x = x
         self.y = y
         self.vel_x = vel_x
@@ -24,8 +25,7 @@ class Particle:
         self.size = size
 
     def update(self):
-        # Beweeg het particle en verlaag de levensduur.
-        # Geeft True terug als het particle nog leeft.
+        """Advance the particle simulation and report whether it is still alive."""
         self.x += self.vel_x
         self.y += self.vel_y
         self.vel_y += 0.2   # Zwaartekracht
@@ -34,7 +34,7 @@ class Particle:
         return self.lifetime > 0
 
     def draw(self, screen, camera_offset=(0, 0)):
-        # Teken het particle (wordt doorzichtiger naarmate het ouder wordt).
+        """Draw the particle as a fading circle in screen space."""
         fade = self.lifetime / self.max_lifetime
         size = max(1, int(self.size * fade))
         color = tuple(int(c * fade) for c in self.color)
@@ -45,20 +45,21 @@ class Particle:
 
 
 class ScreenShake:
-    # Schudt het scherm kort na een harde klap.
+    """Track the active camera shake after heavy hits."""
 
     def __init__(self):
+        """Start with no active shake."""
         self.intensity = 0
         self.duration = 0
 
     def trigger(self, intensity, duration):
-        # Start een screen shake (sterkere shake overschrijft zwakkere).
+        """Start or replace the current shake when the new one is stronger."""
         if intensity > self.intensity or self.duration <= 0:
             self.intensity = intensity
             self.duration = duration
 
     def update(self):
-        # Bereken de offset voor dit frame. Geeft (offset_x, offset_y) terug.
+        """Return the shake offset for this frame and decay the effect."""
         if self.duration <= 0:
             return (0, 0)
 
@@ -73,9 +74,10 @@ class ScreenShake:
 
 
 class EffectsSystem:
-    # Beheert alle visuele effecten tegelijk.
+    """Manage particles, trails and screen shake for the match."""
 
     def __init__(self):
+        """Initialize effect collections and safety caps."""
         self.particles = []
         self.screen_shake = ScreenShake()
         self.trails = []        # Dash-nasleep
@@ -83,7 +85,7 @@ class EffectsSystem:
         self.max_trails = 40
 
     def update(self):
-        # Update alle effecten en geeft de screen-shake-offset terug.
+        """Advance all effects and return the current screen-shake offset."""
         self.particles = [p for p in self.particles if p.update()]
 
         # Update trails: verlaag levensduur en pas doorzichtigheid aan
@@ -95,7 +97,7 @@ class EffectsSystem:
         return self.screen_shake.update()
 
     def process_hit_events(self, events):
-        # Verwerk treffer-events en spawn de bijbehorende effecten.
+        """Convert gameplay hit events into particles and camera shake."""
         for event in events:
             if event["type"] == "hit":
                 self.spawn_hit_particles(event["x"], event["y"], event["knockback"])
@@ -103,7 +105,7 @@ class EffectsSystem:
                 self.screen_shake.trigger(shake_intensity, EffectSettings.SCREEN_SHAKE_DURATION)
 
     def spawn_hit_particles(self, x, y, intensity=1.0):
-        # Spawn particles op de treffer-locatie.
+        """Spawn impact particles around a hit location."""
         hit_colors = [
             (255, 255, 200),
             (255, 200, 100),
@@ -133,7 +135,7 @@ class EffectsSystem:
             self.particles = self.particles[-self.max_particles:]
 
     def add_trail(self, x, y, width, height, color):
-        # Voeg een dash-trail toe op de opgegeven positie.
+        """Add one fading trail rectangle behind a dash or burst movement."""
         self.trails.append({
             "x": x,
             "y": y,
@@ -149,7 +151,7 @@ class EffectsSystem:
             self.trails = self.trails[-self.max_trails:]
 
     def draw(self, screen, camera_offset=(0, 0)):
-        # Teken alle effecten.
+        """Draw all active trails and particles for the current frame."""
         for trail in self.trails:
             fade = max(0.2, trail["alpha"] / 255)
             color = tuple(int(c * fade) for c in trail["color"])

@@ -9,15 +9,17 @@ from config import GRAVITY, MAX_FALL_SPEED, GROUND_FRICTION, AIR_FRICTION
 
 
 class PhysicsSystem:
+    """Standalone physics helper for gravity, friction and platform landing."""
 
     def __init__(self):
+        """Copy the tunable physics values from config into one system object."""
         self.gravity = GRAVITY
         self.max_fall_speed = MAX_FALL_SPEED
         self.ground_friction = GROUND_FRICTION
         self.air_friction = AIR_FRICTION
 
     def update(self, characters, platforms):
-        # Update physics voor alle characters.
+        """Apply one physics step to every character."""
         for character in characters:
             self._apply_gravity(character)
             self._apply_friction(character)
@@ -26,7 +28,7 @@ class PhysicsSystem:
             self._handle_platform_collision(character, platforms)
 
     def _apply_gravity(self, character):
-        # Pas zwaartekracht toe.
+        """Apply gravity unless the character is grounded or dashing."""
         if not character.on_ground and not character.is_dashing:
             weight = getattr(character, 'weight', 1.0)
             character.vel_y += self.gravity * weight
@@ -34,7 +36,7 @@ class PhysicsSystem:
                 character.vel_y = self.max_fall_speed
 
     def _apply_friction(self, character):
-        # Pas wrijving toe (meer op de grond dan in de lucht).
+        """Reduce horizontal speed, with stronger friction on the ground."""
         if character.is_dashing:
             return
 
@@ -47,7 +49,7 @@ class PhysicsSystem:
             character.vel_x = 0
 
     def _handle_platform_collision(self, character, platforms):
-        # Laat de character landen op platforms.
+        """Snap a falling character onto the top of any platform it lands on."""
         character.on_ground = False
 
         for platform in platforms:

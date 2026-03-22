@@ -11,6 +11,7 @@ from config import AttackData
 
 
 class Warrior(BaseCharacter):
+    """Default playable fighter used in the current game flow."""
 
     def __init__(self, x, y, player_id):
         super().__init__(x, y, player_id)
@@ -22,9 +23,11 @@ class Warrior(BaseCharacter):
         self.weight = 1.0  # Normale knockback-weerstand
 
     def get_character_name(self):
+        """Return the display name shown in the HUD."""
         return "Warrior"
 
     def light_attack(self):
+        """Create the warrior's quick jab attack."""
         # Snelle punch: weinig schade, snel herstel, goed als combo-starter.
         return self._create_attack(
             name="Quick Punch",
@@ -42,6 +45,7 @@ class Warrior(BaseCharacter):
         )
 
     def heavy_attack(self):
+        """Create the warrior's slower high-knockback kick."""
         # Krachtige kick: veel schade en knockback, maar traag.
         return self._create_attack(
             name="Power Kick",
@@ -59,6 +63,7 @@ class Warrior(BaseCharacter):
         )
 
     def special_attack(self):
+        """Create the warrior's wide spinning slash attack."""
         # Spinning Slash: grote hitbox, raakt aan beide kanten, schiet omhoog.
         return self._create_attack(
             name="Spinning Slash",

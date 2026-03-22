@@ -29,6 +29,10 @@ from ui.upgrade_shop import RoundUpgradeShop
 
 
 class Game:
+    """Main client controller.
+
+    It owns the pygame loop, current screen state and local/network input flow.
+    """
 
     def __init__(self):
         pygame.init()
@@ -76,6 +80,7 @@ class Game:
         }
 
     def run(self):
+        """Run the main game loop until the window is closed."""
         while self.running:
             self.clock.tick(FPS)
             self._handle_events()
@@ -86,6 +91,7 @@ class Game:
         self._cleanup()
 
     def _handle_events(self):
+        """Route pygame events to the active screen or gameplay handler."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -138,6 +144,7 @@ class Game:
                 self._handle_game_over_event(event)
 
     def _handle_menu_event(self, event):
+        """Process menu actions such as host, join or local play."""
         self.menu.handle_event(event)
         result = self.menu.update()
         if not result:
@@ -155,6 +162,7 @@ class Game:
             self._return_to_menu()
 
     def _handle_stat_select_event(self, event):
+        """Process stat selection input and sync it to the active game state."""
         self.stat_select.handle_event(event)
 
         pending_stats = self.stat_select.consume_pending_stats()
@@ -180,6 +188,7 @@ class Game:
                     self._refresh_local_character_ref()
 
     def _handle_game_event(self, event):
+        """Translate key presses into local actions or network input flags."""
         if event.type not in (pygame.KEYDOWN, pygame.KEYUP):
             return
 
@@ -209,10 +218,12 @@ class Game:
             self.pending_network_actions["ultimate_trigger"] = True
 
     def _handle_game_over_event(self, event):
+        """Allow leaving the game-over screen with Escape."""
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._return_to_menu()
 
     def _handle_upgrade_shop_event(self, event):
+        """Handle shop purchases, equips and ready actions for the local player."""
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
         if not player:
             return
@@ -254,6 +265,7 @@ class Game:
             self._refresh_local_character_ref()
 
     def _update(self):
+        """Advance menu state, networking, game logic and screen transitions."""
         if self.state == "menu":
             self.menu.animate()
 
@@ -274,6 +286,7 @@ class Game:
         self._update_mouse_visibility()
 
     def _update_game(self):
+        """Run one gameplay tick including collisions, effects and trails."""
         if self.game_state.phase != "playing":
             self.camera_offset = self.effects.update()
             return
@@ -298,6 +311,7 @@ class Game:
                 self.effects.add_trail(char.x, char.y, char.width, char.height, char.color)
 
     def _render(self):
+        """Render whichever screen matches the current client state."""
         if self.state == "menu":
             self.menu.draw()
         elif self.state == "stat_select":
@@ -314,6 +328,7 @@ class Game:
             self._render_game_over()
 
     def _resolve_background_path(self, relative_or_absolute_path):
+        """Resolve a stage background path and return None when it is missing."""
         if not relative_or_absolute_path:
             return None
 
@@ -324,6 +339,7 @@ class Game:
         return full_path if os.path.exists(full_path) else None
 
     def _load_stage_background_image(self):
+        """Load and scale the current stage background image once needed."""
         background_path = self._resolve_background_path(self.game_state.current_stage_background_path)
         if not background_path:
             return None
@@ -336,6 +352,7 @@ class Game:
         return pygame.transform.scale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
     def _draw_stage_background(self):
+        """Draw the cached arena background or fall back to a flat color."""
         stage_id = self.game_state.current_stage_id or (
             "final_round" if self.game_state.is_final_round else "default"
         )
@@ -349,21 +366,25 @@ class Game:
             self.screen.fill(Colors.BG_COLOR)
 
     def _apply_display_mode(self):
+        """Create the pygame display surface for the current fullscreen mode."""
         flags = pygame.FULLSCREEN if self.fullscreen else 0
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
         self._refresh_ui_surfaces()
 
     def _refresh_ui_surfaces(self):
+        """Update all UI components to use the current display surface."""
         for component_name in ("menu", "hud", "stat_select", "upgrade_shop"):
             component = getattr(self, component_name, None)
             if component is not None:
                 component.screen = self.screen
 
     def _toggle_fullscreen(self):
+        """Switch between fullscreen and windowed rendering."""
         self.fullscreen = not self.fullscreen
         self._apply_display_mode()
 
     def _update_mouse_visibility(self):
+        """Hide the cursor during focused gameplay after mouse capture starts."""
         if self.state != "playing":
             self.mouse_capture_active = False
             pygame.mouse.set_visible(True)
@@ -373,6 +394,7 @@ class Game:
         pygame.mouse.set_visible(not hide_mouse)
 
     def _render_stat_select(self):
+        """Render the stat allocation screen with up-to-date player counts."""
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
         if player:
             self.stat_select.sync(player.build_stats, player.stats_locked, self.game_state.stat_point_budget)
@@ -381,6 +403,7 @@ class Game:
         self.stat_select.draw(self.game_state.get_stat_select_seconds_remaining(), player_count, locked_count)
 
     def _render_game(self):
+        """Draw the stage, characters, effects and gameplay HUD."""
         self._draw_stage_background()
 
         for platform in self.game_state.platforms:
@@ -401,6 +424,7 @@ class Game:
         self.hud.draw(self._get_all_characters(), self.local_player_id or 0, self.game_state)
 
     def _render_upgrade_shop(self):
+        """Render the between-round upgrade shop for the local player."""
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
         if not player:
             self.screen.fill(Colors.BG_COLOR)
@@ -421,6 +445,7 @@ class Game:
         )
 
     def _render_game_over(self):
+        """Render the winner overlay after the match ends."""
         if self.game_state.winner is not None:
             winner_id = self.game_state.winner
             winner_player = self.game_state.get_player(winner_id)
@@ -439,9 +464,11 @@ class Game:
             self.hud.draw_winner("DRAW", Colors.GRAY)
 
     def _get_all_characters(self):
+        """Return the connected character objects from the shared game state."""
         return self.game_state.get_characters()
 
     def _start_local_game(self):
+        """Start an offline session and move straight into stat selection."""
         self._disconnect()
         self.is_local = True
         self.local_player_id = 0
@@ -452,6 +479,7 @@ class Game:
         self.state = "stat_select"
 
     def _update_local_stat_select(self):
+        """Advance the offline stat-select phase and start the match when ready."""
         player = self.game_state.get_player(self.local_player_id)
         if player and player.stats_locked:
             self._finalize_local_stat_selection()
@@ -463,12 +491,14 @@ class Game:
                 self._finalize_local_stat_selection()
 
     def _update_local_upgrade_shop(self):
+        """Advance the offline shop while auto-readying non-human opponents."""
         if self.game_state.phase == "upgrade_shop":
             self._auto_ready_local_opponents()
             self.game_state.update()
             self._refresh_local_character_ref()
 
     def _finalize_local_stat_selection(self):
+        """Create the offline match roster and enter gameplay."""
         player = self.game_state.get_player(self.local_player_id)
         if not player:
             return
@@ -481,6 +511,7 @@ class Game:
         self.state = "playing"
 
     def _add_local_opponent(self):
+        """Create a simple second player for local matches."""
         opponent_id = 1
         self.game_state.add_player(opponent_id)
         opponent = self.game_state.get_player(opponent_id)
@@ -497,6 +528,7 @@ class Game:
         opponent.stats_locked = True
 
     def _start_host(self):
+        """Launch the bundled server and connect this client as the host."""
         self.host_ip = self._get_local_ip()
         if not (self.server_process and self.server_process.poll() is None):
             server_script = os.path.join(os.path.dirname(__file__), "server.py")
@@ -525,6 +557,7 @@ class Game:
         self.network = None
 
     def _join_lobby(self, ip):
+        """Connect this client to an existing lobby by IP address."""
         self.network = Network(ip)
         if self.network.connect(self.username):
             self.local_player_id = self.network.get_player_id()
@@ -535,6 +568,7 @@ class Game:
             self.network = None
 
     def _update_screen_from_phase(self):
+        """Mirror the authoritative game phase into the visible client state."""
         if self.is_local:
             if self.game_state.phase == "stat_select":
                 self.state = "stat_select"
@@ -564,6 +598,7 @@ class Game:
             self.state = "menu"
 
     def _sync_with_server(self, force=False):
+        """Poll or submit input to the server and apply the returned snapshot."""
         if not self.network:
             return
 
@@ -602,6 +637,7 @@ class Game:
                     self.pending_network_actions[key] = False
 
     def _submit_round_ready(self):
+        """Mark the local player as ready for the next round."""
         if self.local_player_id is None:
             return
 
@@ -618,6 +654,7 @@ class Game:
             self._refresh_local_character_ref()
 
     def _auto_ready_local_opponents(self):
+        """Auto-ready AI or placeholder players in offline upgrade shops."""
         for player in self.game_state.get_connected_players():
             if player.player_id == self.local_player_id:
                 continue
@@ -625,10 +662,12 @@ class Game:
                 self.game_state.set_player_ready(player.player_id, True)
 
     def _refresh_local_character_ref(self):
+        """Refresh the cached reference to the local player's character."""
         player = self.game_state.get_player(self.local_player_id) if self.local_player_id is not None else None
         self.local_character = player.character if player else None
 
     def _get_local_ip(self):
+        """Best-effort lookup of the LAN IP address shown to joining players."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.connect(("8.8.8.8", 80))
@@ -639,12 +678,14 @@ class Game:
             return "127.0.0.1"
 
     def _return_to_menu(self):
+        """Disconnect the current session and restore the menu screen."""
         self._disconnect()
         self.state = "menu"
         self.menu = MainMenu(self.screen)
         self.menu.state = "mode_select"
 
     def _disconnect(self):
+        """Close network/server resources and reset all runtime session state."""
         if self.network:
             self.network.disconnect()
             self.network = None
@@ -668,11 +709,13 @@ class Game:
         self.stat_select.reset()
 
     def _cleanup(self):
+        """Release session resources and shut down pygame cleanly."""
         self._disconnect()
         pygame.quit()
 
 
 def main():
+    """Create and run the main game client."""
     parser = argparse.ArgumentParser(description="Brawl Arena - Platform Fighter")
     args = parser.parse_args()
     _ = args

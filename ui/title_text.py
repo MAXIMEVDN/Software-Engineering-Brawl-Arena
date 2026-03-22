@@ -24,6 +24,7 @@ _BUNDLED_FONT_PATH = os.path.join(
 
 
 def get_ui_font(size):
+    """Return a cached UI font, preferring the bundled pixel font."""
     font = _UI_FONT_CACHE.get(size)
     if font is not None:
         return font
@@ -38,6 +39,7 @@ def get_ui_font(size):
 
 
 def get_title_style_font(size):
+    """Return a cached display font suited for title-style headings."""
     font = _TITLE_FONT_CACHE.get(size)
     if font is not None:
         return font
@@ -60,6 +62,7 @@ def get_title_style_font(size):
 
 
 def render_fit_text(text, color, max_width, preferred_size, min_size=12):
+    """Render text at the largest font size that still fits the given width."""
     for size in range(preferred_size, min_size - 1, -1):
         surface = get_ui_font(size).render(text, True, color)
         if surface.get_width() <= max_width or size == min_size:
@@ -78,6 +81,7 @@ def draw_title_style_text(
     shadow_offset=(6, 6),
     outline_width=2,
 ):
+    """Draw stylized title text with shadow and optional outline."""
     font = get_title_style_font(size)
 
     shadow_surface = font.render(text, False, shadow_color)

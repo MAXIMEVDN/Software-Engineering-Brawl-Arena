@@ -10,6 +10,7 @@ from config import SPRITE_CONFIG
 
 
 class AnimationSystem:
+    """Load sprite frames and track per-player animation timers."""
     # Beheert het laden en afspelen van sprite-animaties.
 
     def __init__(self, sprites_path="assets/sprites"):
@@ -18,6 +19,7 @@ class AnimationSystem:
         self.animation_timers = {}  # player_id -> timer
 
     def load_character_sprites(self, character_name):
+        """Load every configured animation strip for one character."""
         # Laad alle animatieframes voor een character.
         # Geeft een dictionary terug: animatienaam -> lijst van frames.
         if character_name in self.sprite_cache:
@@ -55,6 +57,7 @@ class AnimationSystem:
         return sprites
 
     def _load_sprite_sheet(self, path, num_frames, frame_width, frame_height):
+        """Slice a sprite sheet into individual frame surfaces."""
         # Knip een sprite sheet op in losse frames.
         try:
             sheet = pygame.image.load(path).convert_alpha()
@@ -70,6 +73,7 @@ class AnimationSystem:
         return frames
 
     def _create_placeholder_frames(self, num_frames, width, height):
+        """Create fallback placeholder frames when no sprite asset exists."""
         # Maak eenvoudige grijze rechthoeken als er geen sprite gevonden is.
         frames = []
         for i in range(num_frames):
@@ -81,6 +85,7 @@ class AnimationSystem:
         return frames
 
     def get_frame(self, character_name, animation_name, frame_index, facing_right=True):
+        """Return one frame from an animation, flipped when facing left."""
         # Haal één animatieframe op voor een character.
         sprites = self.sprite_cache.get(character_name)
         if not sprites:
@@ -99,6 +104,7 @@ class AnimationSystem:
         return frame
 
     def update_animation(self, player_id, animation_name, animation_speed=5):
+        """Advance and return the frame index for one player's animation."""
         # Update de animatietimer en geef de huidige frame-index terug.
         if player_id not in self.animation_timers:
             self.animation_timers[player_id] = 0
@@ -112,5 +118,6 @@ class AnimationSystem:
         return (self.animation_timers[player_id] // speed) % num_frames
 
     def reset_animation(self, player_id):
+        """Clear the stored animation timer for one player."""
         # Reset de animatietimer voor een speler.
         self.animation_timers[player_id] = 0

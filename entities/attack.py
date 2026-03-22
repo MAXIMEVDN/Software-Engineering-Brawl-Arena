@@ -11,31 +11,33 @@ import pygame
 
 
 class Hitbox:
-    # Een rechthoek die bijhoudt waar een aanval raak kan zijn.
+    """Rectangle wrapper that represents the active area of an attack."""
 
     def __init__(self, x, y, width, height):
+        """Store the hitbox position and size in world coordinates."""
         self.x = x
         self.y = y
         self.width = width
         self.height = height
 
     def get_rect(self):
-        # Geef de hitbox als pygame Rect terug.
+        """Return the hitbox as a pygame Rect."""
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def collides_with(self, other):
-        # Controleer of deze hitbox overlapt met een andere.
+        """Return whether this hitbox overlaps another hitbox-like object."""
         return self.get_rect().colliderect(other.get_rect())
 
 
 class Attack:
-    # Eén aanval met alle bijbehorende eigenschappen.
+    """Store the gameplay data and runtime state for one attack."""
 
     def __init__(self, name, damage, knockback_base, knockback_scaling,
                  knockback_angle, startup_frames, active_frames, recovery_frames,
                  hitbox_width, hitbox_height, hitbox_offset_x=0, hitbox_offset_y=0,
                  effect_type=None, hold_frames=0, throw_knockback_base=0.0,
                  throw_knockback_scaling=0.0, throw_angle=0, anchor_mode="facing"):
+        """Create an attack definition with timing, hitbox and effect data."""
         self.name = name
         self.damage = damage
         self.knockback_base = knockback_base
@@ -64,7 +66,7 @@ class Attack:
         self.owner_id = None  # Wie deze aanval uitvoert
 
     def update_position(self, owner_x, owner_y, facing_right, owner_width):
-        # Verplaats de hitbox mee met de character.
+        """Reposition the hitbox relative to the owning character."""
         if self.anchor_mode == "center":
             self.hitbox.x = owner_x + (owner_width - self.hitbox_width) / 2
             self.hitbox.y = owner_y + self.hitbox_offset_y
@@ -77,7 +79,7 @@ class Attack:
         self.hitbox.y = owner_y + self.hitbox_offset_y
 
     def can_hit(self, target_id):
-        # Controleer of deze aanval het opgegeven target mag raken.
+        """Return whether this attack may still damage the given target."""
         return (
             self.is_active and
             target_id != self.owner_id and
@@ -85,15 +87,15 @@ class Attack:
         )
 
     def register_hit(self, target_id):
-        # Onthoud dat dit target al geraakt is (zodat het niet dubbel geraakt wordt).
+        """Mark a target as already hit so the attack does not hit twice."""
         self.has_hit.add(target_id)
 
     def get_total_frames(self):
-        # Totaal aantal frames van de aanval.
+        """Return the full attack duration across all phases."""
         return self.startup_frames + self.active_frames + self.recovery_frames
 
     def to_dict(self):
-        # Zet de aanval om naar een dictionary (voor netwerkverzending).
+        """Serialize the attack so it can be synced over the network."""
         return {
             "name": self.name,
             "damage": self.damage,
@@ -126,7 +128,7 @@ class Attack:
 
     @classmethod
     def from_dict(cls, data):
-        # Maak een Attack-object van een dictionary (ontvangen van netwerk).
+        """Rebuild an attack instance from serialized network data."""
         attack = cls(
             name=data["name"],
             damage=data["damage"],
@@ -156,12 +158,12 @@ class Attack:
 
 
 class Projectile(Attack):
-    # Een projectiel dat door de lucht vliegt.
-    # Erft van Attack maar beweegt zelfstandig.
+    """Attack subtype that travels independently after being launched."""
 
     def __init__(self, name, damage, knockback_base, knockback_scaling,
                  knockback_angle, hitbox_width, hitbox_height,
                  speed, lifetime, gravity=False):
+        """Create a projectile with travel speed, lifetime and optional gravity."""
         super().__init__(
             name=name,
             damage=damage,
@@ -182,14 +184,13 @@ class Projectile(Attack):
         self.is_active = True
 
     def launch(self, x, y, facing_right):
-        # Lanceer het projectiel vanuit een positie.
+        """Spawn the projectile at a position and send it left or right."""
         self.hitbox.x = x
         self.hitbox.y = y
         self.vel_x = self.speed if facing_right else -self.speed
 
     def update(self):
-        # Beweeg het projectiel en verlaag de levensduur.
-        # Geeft True terug als het projectiel nog actief is, anders False.
+        """Move the projectile one frame and report whether it is still alive."""
         self.hitbox.x += self.vel_x
         self.hitbox.y += self.vel_y
 
@@ -200,7 +201,7 @@ class Projectile(Attack):
         return self.lifetime > 0
 
     def to_dict(self):
-        # Zet het projectiel om naar een dictionary (voor netwerkverzending).
+        """Serialize the projectile, including its current velocity."""
         data = super().to_dict()
         data.update({
             "type": "projectile",
@@ -212,6 +213,7 @@ class Projectile(Attack):
 
     @classmethod
     def from_dict(cls, data):
+        """Rebuild a projectile from serialized network state."""
         projectile = cls(
             name=data["name"],
             damage=data["damage"],

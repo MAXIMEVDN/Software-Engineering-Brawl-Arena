@@ -38,6 +38,7 @@ from config import (
 
 @dataclass
 class PlayerData:
+    """Persistent per-player data shared across lobby, rounds and shops."""
     player_id: int
     character: Optional[BaseCharacter] = None
     ready: bool = False
@@ -52,6 +53,7 @@ class PlayerData:
     username: str = ""
 
     def __post_init__(self):
+        """Fill mutable player defaults after dataclass construction."""
         if self.build_stats is None:
             self.build_stats = dict(DEFAULT_BUILD_STATS)
         if self.owned_ultimate_ids is None:
@@ -61,6 +63,7 @@ class PlayerData:
 
 
 class GameState:
+    """Single source of truth for players, rounds and match progression."""
 
     def __init__(self):
         self.players: Dict[int, PlayerData] = {}
@@ -94,6 +97,7 @@ class GameState:
         self._refresh_stage_layout()
 
     def _create_platforms(self, stage_definition: Optional[Dict[str, Any]] = None) -> List[Platform]:
+        """Create platform objects for the currently active stage."""
         stage_definition = stage_definition or get_stage_definition(self.round_number, self.is_final_round)
         theme = stage_definition.get("theme", {})
         platform_color = theme.get("platform_color")
@@ -104,6 +108,7 @@ class GameState:
         ]
 
     def _refresh_stage_layout(self) -> None:
+        """Load the platforms, spawns and background for the current round."""
         stage_definition = get_stage_definition(self.round_number, self.is_final_round)
         self.current_stage_id = stage_definition.get("id", "default_stage")
         self.current_stage_name = stage_definition.get("name", f"Round {self.round_number}")
@@ -116,9 +121,11 @@ class GameState:
         self.platforms = self._create_platforms(stage_definition)
 
     def active_player_count(self) -> int:
+        """Return the number of connected players."""
         return len(self.get_connected_players())
 
     def _next_player_id(self) -> Optional[int]:
+        """Return the next available player slot or None when full."""
         active_ids = {player.player_id for player in self.get_connected_players()}
         for player_id in range(self.max_players):
             if player_id not in active_ids:
@@ -126,6 +133,7 @@ class GameState:
         return None
 
     def add_player(self, player_id: Optional[int] = None) -> Optional[int]:
+        """Add a new player or reset an existing slot for reconnection."""
         if player_id is None:
             player_id = self._next_player_id()
         if player_id is None:
@@ -147,16 +155,19 @@ class GameState:
         return player_id
 
     def remove_player(self, player_id: int) -> None:
+        """Mark a player as disconnected while keeping their slot data."""
         if player_id in self.players:
             self.players[player_id].connected = False
             self.players[player_id].ready = False
             self.players[player_id].stats_locked = False
 
     def set_player_ready(self, player_id: int, ready: bool = True) -> None:
+        """Set whether a player is ready to advance from the current phase."""
         if player_id in self.players:
             self.players[player_id].ready = ready
 
     def select_stats(self, player_id: int, stats: Dict[str, Any]) -> bool:
+        """Validate and store a player's selected build stats."""
         player = self.players.get(player_id)
         if not player or player.stats_locked:
             return False
@@ -175,6 +186,7 @@ class GameState:
         return True
 
     def lock_stats(self, player_id: int) -> bool:
+        """Lock in a player's chosen stats for this build phase."""
         player = self.players.get(player_id)
         if not player:
             return False
@@ -182,14 +194,17 @@ class GameState:
         return True
 
     def all_players_locked(self) -> bool:
+        """Return whether every connected player has locked their build."""
         connected_players = self.get_connected_players()
         return bool(connected_players) and all(player.stats_locked for player in connected_players)
 
     def all_players_ready(self) -> bool:
+        """Return whether every connected player is marked ready."""
         connected_players = self.get_connected_players()
         return bool(connected_players) and all(player.ready for player in connected_players)
 
     def start_stat_selection(self) -> None:
+        """Reset the match and move all connected players into the build phase."""
         self.phase = "stat_select"
         self.round_number = 1
         self.winner = None
@@ -213,6 +228,7 @@ class GameState:
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def start_game(self) -> None:
+        """Create the characters and start round 1."""
         self.phase = "playing"
         self.round_number = 1
         self.game_timer = 0
@@ -237,6 +253,7 @@ class GameState:
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def update(self) -> List[dict]:
+        """Advance the match state machine and return emitted events."""
         events = []
 
         if self.phase == "stat_select":
@@ -312,6 +329,7 @@ class GameState:
         return events
 
     def reset_round(self) -> None:
+        """Reset fighters, map state and timers for a fresh round start."""
         self.winner = None
         self.game_timer = 0
         self.round_end_remaining_frames = 0
@@ -356,6 +374,7 @@ class GameState:
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def _freeze_characters(self) -> None:
+        """Stop character movement and clear active combat state between phases."""
         for player in self.get_connected_players():
             if not player.character:
                 continue
@@ -379,6 +398,7 @@ class GameState:
             player.character.cancel_ultimate_preview()
 
     def _start_round_end(self, transition: str) -> None:
+        """Enter the round-end pause before the upgrade shop opens."""
         self.phase = "round_end"
         self.round_end_remaining_frames = self.round_end_total_frames
         self.upgrade_shop_remaining_frames = 0
@@ -390,12 +410,14 @@ class GameState:
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def _apply_player_build_to_character(self, player: PlayerData) -> None:
+        """Apply stored build stats and the equipped ultimate to a character."""
         if not player.character:
             return
         player.character.set_build_stats(player.build_stats)
         player.character.set_equipped_ultimate(player.equipped_ultimate_id)
 
     def _start_upgrade_shop(self, transition: str) -> None:
+        """Switch into the upgrade shop and reset per-round ready flags."""
         self.phase = "upgrade_shop"
         self.upgrade_shop_remaining_frames = self.upgrade_shop_total_frames
         self.round_end_remaining_frames = 0
@@ -406,6 +428,7 @@ class GameState:
             player.round_stat_upgrades = {name: 0 for name in DEFAULT_BUILD_STATS}
 
     def upgrade_stat(self, player_id: int, stat_name: str) -> bool:
+        """Spend coins to upgrade a stat during the shop phase."""
         player = self.players.get(player_id)
         if not player or self.phase != "upgrade_shop" or stat_name not in DEFAULT_BUILD_STATS:
             return False
@@ -422,6 +445,7 @@ class GameState:
         return True
 
     def downgrade_stat(self, player_id: int, stat_name: str) -> bool:
+        """Undo a same-round stat upgrade and refund its coin cost."""
         player = self.players.get(player_id)
         if not player or self.phase != "upgrade_shop" or stat_name not in DEFAULT_BUILD_STATS:
             return False
@@ -441,6 +465,7 @@ class GameState:
         return True
 
     def buy_ultimate(self, player_id: int, ultimate_id: str) -> bool:
+        """Purchase and equip a new ultimate during the shop phase."""
         player = self.players.get(player_id)
         offer = ULTIMATE_SHOP_INDEX.get(ultimate_id)
         if not player or not offer or self.phase != "upgrade_shop":
@@ -455,6 +480,7 @@ class GameState:
         return True
 
     def equip_ultimate(self, player_id: int, ultimate_id: str) -> bool:
+        """Equip an ultimate the player already owns."""
         player = self.players.get(player_id)
         offer = ULTIMATE_SHOP_INDEX.get(ultimate_id)
         if not player or not offer or self.phase != "upgrade_shop":
@@ -467,11 +493,13 @@ class GameState:
         return True
 
     def _reset_map_coins(self) -> None:
+        """Clear all stage coins and reset the spawn timer state."""
         self.map_coins = []
         self.coin_spawn_timer = 0
         self.next_coin_id = 1
 
     def _process_character_coin_events(self) -> None:
+        """Apply coin rewards and penalties from queued character events."""
         for player in self.get_connected_players():
             if not player.character:
                 continue
@@ -487,6 +515,7 @@ class GameState:
                     killer.coins += COINS_PER_KILL
 
     def _collect_map_coins(self) -> None:
+        """Award any spawned map coins collected by characters this frame."""
         remaining_coins = []
         for coin in self.map_coins:
             collected = False
@@ -504,6 +533,7 @@ class GameState:
         self.map_coins = remaining_coins
 
     def _update_map_coin_spawns(self) -> None:
+        """Spawn new map coins over time until the maximum is reached."""
         if len(self.map_coins) >= MAX_MAP_COINS:
             return
 
@@ -515,6 +545,7 @@ class GameState:
         self.map_coins.append(self._create_random_coin())
 
     def _create_random_coin(self) -> CoinPickup:
+        """Create a coin above a random platform with basic spacing rules."""
         radius = MAP_COIN_RADIUS
 
         for _ in range(12):
@@ -536,16 +567,19 @@ class GameState:
         return fallback_coin
 
     def _award_round_coins(self) -> None:
+        """Grant the end-of-round coin reward to all connected players."""
         for player in self.get_connected_players():
             player.coins += COINS_PER_ROUND
 
     def _advance_preliminary_round(self) -> None:
+        """Increment the round counter and start the next preliminary round."""
         self.round_number += 1
         self.phase = "playing"
         self.stocks_per_player = INFINITE_STOCKS
         self.reset_round()
 
     def _start_final_round(self) -> None:
+        """Start the final stock-based round after preliminaries end."""
         self.round_number = self.preliminary_rounds + 1
         self.phase = "playing"
         self.is_final_round = True
@@ -553,29 +587,36 @@ class GameState:
         self.reset_round()
 
     def get_connected_players(self) -> List[PlayerData]:
+        """Return all player entries that are still connected."""
         return [player for player in self.players.values() if player.connected]
 
     def get_characters(self) -> List[BaseCharacter]:
+        """Return connected character instances that currently exist."""
         return [
             player.character for player in self.players.values()
             if player.connected and player.character is not None
         ]
 
     def get_player(self, player_id: int) -> Optional[PlayerData]:
+        """Look up one player's stored data by id."""
         return self.players.get(player_id)
 
     def set_player_username(self, player_id: int, username: str) -> None:
+        """Store a clipped display name for one player."""
         player = self.players.get(player_id)
         if player:
             player.username = username[:20]
 
     def get_stat_select_seconds_remaining(self) -> int:
+        """Return the remaining stat-selection time in whole seconds."""
         return max(0, (self.stat_select_remaining_frames + FPS - 1) // FPS)
 
     def get_upgrade_shop_seconds_remaining(self) -> int:
+        """Return the remaining shop time in whole seconds."""
         return max(0, (self.upgrade_shop_remaining_frames + FPS - 1) // FPS)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize the full authoritative game state for network sync."""
         return {
             "phase": self.phase,
             "round_number": self.round_number,
@@ -615,6 +656,7 @@ class GameState:
         }
 
     def from_dict(self, data: Dict[str, Any]) -> None:
+        """Load a full game-state snapshot received from the server."""
         self.phase = data["phase"]
         self.round_number = data["round_number"]
         self.winner = data["winner"]

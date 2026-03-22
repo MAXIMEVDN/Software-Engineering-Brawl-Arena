@@ -18,11 +18,13 @@ ICON_DIR = os.path.join("assets", "Icons")
 
 
 def _resolve_asset_path(*parts):
+    """Resolve an asset path relative to the project root."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_dir, *parts)
 
 
 def _load_tinted_icon(icon_filename, target_color, size=48):
+    """Load an icon and tint its bright pixels toward the stat color."""
     full_path = _resolve_asset_path(ICON_DIR, icon_filename)
     if not os.path.exists(full_path):
         return None
@@ -58,6 +60,7 @@ def _load_tinted_icon(icon_filename, target_color, size=48):
 
 
 class StatControl:
+    """One horizontal control row for a single upgrade stat."""
 
     def __init__(self, stat_name, x, y, width=970, height=82):
         self.stat_name = stat_name
@@ -71,6 +74,7 @@ class StatControl:
         self.icon = _load_tinted_icon(self.meta["icon"], self.meta["color"])
 
     def handle_event(self, event):
+        """Return `-1` or `1` when one of the stat buttons is clicked."""
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
             return None
         if self.minus_rect.collidepoint(event.pos):
@@ -80,6 +84,7 @@ class StatControl:
         return None
 
     def draw(self, screen, value, max_fill, selected=False, selected_button="plus"):
+        """Draw the icon, progress bar and plus/minus buttons for one stat."""
         pygame.draw.rect(screen, (36, 40, 50), self.rect, border_radius=14)
         border_color = Colors.ORANGE if selected else (86, 92, 110)
         pygame.draw.rect(screen, border_color, self.rect, 3 if selected else 2, border_radius=14)
@@ -110,6 +115,7 @@ class StatControl:
 
 
 class CharacterSelect:
+    """Pre-round screen where each player distributes build points."""
 
     def __init__(self, screen):
         self.screen = screen
@@ -122,6 +128,7 @@ class CharacterSelect:
         self.reset()
 
     def _create_controls(self):
+        """Create one control row for each build stat."""
         start_x = 155
         start_y = 150
         spacing = 84
@@ -131,6 +138,7 @@ class CharacterSelect:
         ]
 
     def reset(self):
+        """Return the local selection UI to its default state."""
         self.local_stats = {stat_name: 0 for stat_name in BUILD_STAT_NAMES}
         self.points_left = STAT_POINT_BUDGET
         self.confirmed = False
@@ -141,11 +149,13 @@ class CharacterSelect:
         self.selected_section = "stats"
 
     def sync(self, stats, locked, budget):
+        """Mirror the server-approved stats into the local UI."""
         self.local_stats = dict(stats)
         self.points_left = max(0, budget - sum(self.local_stats.values()))
         self.confirmed = locked
 
     def handle_event(self, event):
+        """Handle keyboard and mouse input for the stat selection screen."""
         if self.confirmed:
             return
 
@@ -203,6 +213,7 @@ class CharacterSelect:
             break
 
     def _sync_selection_from_mouse(self, mouse_pos):
+        """Move the current selection to the control under the cursor."""
         if self.ready_rect.collidepoint(mouse_pos):
             self.selected_section = "ready"
             return
@@ -224,6 +235,7 @@ class CharacterSelect:
                 return
 
     def _apply_delta(self, stat_name, delta):
+        """Apply a stat change while respecting the available point budget."""
         current = self.local_stats[stat_name]
         if delta > 0 and self.points_left > 0:
             self.local_stats[stat_name] = current + 1
@@ -235,18 +247,21 @@ class CharacterSelect:
             self.changed = True
 
     def consume_pending_stats(self):
+        """Return a stat update once after the player has changed something."""
         if not self.changed:
             return None
         self.changed = False
         return dict(self.local_stats)
 
     def consume_lock_request(self):
+        """Return whether the player requested to lock their build."""
         if not self.lock_requested:
             return False
         self.lock_requested = False
         return True
 
     def draw(self, remaining_seconds, player_count, locked_count):
+        """Render the full build-allocation screen."""
         self.screen.fill(Colors.BG_COLOR)
 
         title = self.title_font.render("BUILD YOUR FIGHTER", True, Colors.WHITE)

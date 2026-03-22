@@ -10,12 +10,13 @@ from config import Colors
 
 
 class Platform:
-    # Een platform waarop characters kunnen lopen en staan.
+    """Solid arena surface that characters can land and stand on."""
     _base_tile = None
     _tile_load_attempted = False
     _surface_cache = {}
 
     def __init__(self, x, y, width, height, color=None, is_passthrough=True):
+        """Create one platform with geometry, color and passthrough rules."""
         self.x = x
         self.y = y
         self.width = width
@@ -24,11 +25,12 @@ class Platform:
         self.is_passthrough = is_passthrough  # Je kunt er van onder doorheen springen
 
     def get_rect(self):
-        # Geef de collision-rechthoek terug.
+        """Return the platform bounds as a pygame Rect."""
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
     @staticmethod
     def _mix_color(base_color, target_color, factor):
+        """Blend one RGB color toward another by the given factor."""
         factor = max(0.0, min(1.0, factor))
         return tuple(
             int(base_color[index] + (target_color[index] - base_color[index]) * factor)
@@ -37,6 +39,7 @@ class Platform:
 
     @classmethod
     def _get_base_tile(cls):
+        """Load the prototype tile texture once for all platform instances."""
         if cls._tile_load_attempted:
             return cls._base_tile
 
@@ -61,6 +64,7 @@ class Platform:
         return cls._base_tile
 
     def _build_surface(self):
+        """Build the cached platform surface with tinting and highlights."""
         surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         base_tile = self._get_base_tile()
 
@@ -110,6 +114,7 @@ class Platform:
         return surface
 
     def _get_surface(self):
+        """Return a cached platform surface for this size and color."""
         cache_key = (self.width, self.height, tuple(self.color))
         cached_surface = self._surface_cache.get(cache_key)
         if cached_surface is None:
@@ -118,7 +123,7 @@ class Platform:
         return cached_surface
 
     def draw(self, screen, camera_offset=(0, 0)):
-        # Teken het platform met een tiled prototype-look en extra contrast tegen de arena-backgrounds.
+        """Draw the platform with its cached texture and shadow."""
         draw_x = self.x - camera_offset[0]
         draw_y = self.y - camera_offset[1]
 
@@ -127,7 +132,7 @@ class Platform:
         screen.blit(self._get_surface(), (draw_x, draw_y))
 
     def to_dict(self):
-        # Zet het platform om naar een dictionary (voor netwerkverzending).
+        """Serialize the platform geometry for game-state sync."""
         return {
             "x": self.x,
             "y": self.y,
@@ -138,5 +143,5 @@ class Platform:
 
     @classmethod
     def from_tuple(cls, data):
-        # Maak een Platform van een tuple (x, y, width, height).
+        """Create a platform from a raw `(x, y, width, height)` tuple."""
         return cls(data[0], data[1], data[2], data[3])

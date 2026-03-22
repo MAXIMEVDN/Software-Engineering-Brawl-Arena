@@ -11,6 +11,7 @@ from config import SERVER_IP, SERVER_PORT, BUFFER_SIZE, CONNECTION_TIMEOUT
 
 
 class Network:
+    """Small client wrapper around the socket connection to the game server."""
 
     def __init__(self, server_ip: str = None):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -25,6 +26,7 @@ class Network:
         self._lock = threading.Lock()
 
     def connect(self, username: str = "") -> bool:
+        """Open the socket connection and perform the lobby handshake."""
         try:
             self.client.connect(self.addr)
             self.client.sendall(pickle.dumps({"type": "join_lobby", "username": username, "data": {}}))
@@ -51,6 +53,7 @@ class Network:
             return False
 
     def send(self, data: Any) -> Optional[Any]:
+        """Send one request to the server and wait for the reply."""
         if not self.connected:
             return None
 
@@ -71,6 +74,7 @@ class Network:
                 return None
 
     def disconnect(self) -> None:
+        """Close the socket and mark this client as disconnected."""
         self.connected = False
         try:
             self.client.close()
@@ -78,7 +82,9 @@ class Network:
             pass
 
     def is_connected(self) -> bool:
+        """Return whether the client currently has an open server connection."""
         return self.connected
 
     def get_player_id(self) -> Optional[int]:
+        """Return the player id assigned by the server handshake."""
         return self.player_id

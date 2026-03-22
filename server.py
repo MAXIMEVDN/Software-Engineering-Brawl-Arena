@@ -24,6 +24,8 @@ from systems.collision import CollisionSystem
 
 @dataclass
 class PlayerInputState:
+    """Holds the latest input for one player between server ticks."""
+
     left: bool = False
     right: bool = False
     up: bool = False
@@ -38,6 +40,7 @@ class PlayerInputState:
     ultimate_release: bool = False
 
     def update_from_payload(self, payload: Dict[str, Any]) -> None:
+        """Merge a fresh network payload into the stored input state."""
         self.left = bool(payload.get("left", False))
         self.right = bool(payload.get("right", False))
         self.up = bool(payload.get("up", False))
@@ -52,6 +55,7 @@ class PlayerInputState:
         self.ultimate_release = self.ultimate_release or bool(payload.get("ultimate_release", False))
 
     def consume_for_tick(self) -> Dict[str, bool]:
+        """Return the current inputs and clear one-frame actions like jump."""
         current = {
             "left": self.left,
             "right": self.right,
@@ -77,6 +81,10 @@ class PlayerInputState:
 
 
 class GameServer:
+    """Authoritative multiplayer server.
+
+    It accepts clients, owns the shared GameState and advances the match tick by tick.
+    """
 
     def __init__(self, ip: str = "", port: int = SERVER_PORT):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -104,6 +112,7 @@ class GameServer:
         print(f"Server started on port {port}")
 
     def start(self) -> None:
+        """Start the simulation thread and begin accepting clients."""
         self.game_thread.start()
 
         while self.running:
@@ -126,6 +135,7 @@ class GameServer:
         self.shutdown()
 
     def _perform_handshake(self, conn: socket.socket):
+        """Validate the first client message and add the player to the lobby."""
         try:
             data = conn.recv(BUFFER_SIZE)
             message = pickle.loads(data)
@@ -165,6 +175,7 @@ class GameServer:
             return None
 
     def _handle_client(self, conn: socket.socket, player_id: int) -> None:
+        """Handle messages for one connected client until it disconnects."""
         while self.running:
             try:
                 data = conn.recv(BUFFER_SIZE)
@@ -194,6 +205,7 @@ class GameServer:
             pass
 
     def _process_message(self, player_id: int, message: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply one client request and return the updated game state."""
         msg_type = message.get("type", "")
         data = message.get("data", {})
 
@@ -223,11 +235,13 @@ class GameServer:
             }
 
     def _handle_player_input(self, player_id: int, input_data: Dict[str, Any]) -> None:
+        """Store the latest input snapshot for one connected player."""
         payload = input_data.get("input_state", {})
         player_input = self.input_states.setdefault(player_id, PlayerInputState())
         player_input.update_from_payload(payload)
 
     def _game_loop(self) -> None:
+        """Advance the server simulation at a fixed tick rate."""
         while self.running:
             frame_start = time.perf_counter()
 
@@ -243,6 +257,7 @@ class GameServer:
                 time.sleep(sleep_time)
 
     def _tick_game(self) -> None:
+        """Apply player inputs, update characters, resolve hits and advance the match."""
         for player_id, player in self.game_state.players.items():
             if not player.connected or not player.character:
                 continue
@@ -257,6 +272,7 @@ class GameServer:
         self.game_state.update()
 
     def shutdown(self) -> None:
+        """Close all sockets and stop the server cleanly."""
         self.running = False
         for conn in list(self.connections.values()):
             try:
@@ -270,6 +286,7 @@ class GameServer:
 
 
 def main() -> None:
+    """Start the authoritative game server from the command line."""
     port = SERVER_PORT
 
     args = sys.argv[1:]

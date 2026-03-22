@@ -25,6 +25,7 @@ MAX_MAP_COINS = 5
 
 
 class Colors:
+    """Shared RGB color constants used throughout the game."""
     # Alle kleuren die in de game gebruikt worden (RGB).
 
     WHITE = (255, 255, 255)
@@ -60,6 +61,7 @@ AIR_FRICTION = 0.95
 
 
 class CharacterStats:
+    """Base movement, combat and size values for playable characters."""
     # Standaard stats voor alle characters. Subclasses kunnen deze overschrijven.
 
     # Movement
@@ -82,6 +84,7 @@ class CharacterStats:
 
 
 class AttackData:
+    """Default attack templates for light, heavy and special moves."""
     # Standaard aanvalswaarden per type (light, heavy, special).
 
     LIGHT = {
@@ -131,6 +134,7 @@ def _make_stage_theme(
     platform_color,
     accent,
 ):
+    """Bundle the reusable color settings for one arena theme."""
     return {
         "sky_top": sky_top,
         "sky_bottom": sky_bottom,
@@ -144,6 +148,7 @@ def _make_stage_theme(
 
 
 def _spawn_on_platform(platform, y_offset=10):
+    """Place a character spawn roughly centered above the given platform."""
     x, y, width, _ = platform
     return (
         int(x + ((width - CharacterStats.WIDTH) / 2)),
@@ -352,6 +357,7 @@ FINAL_ROUND_STAGE = {
 
 
 def get_stage_definition(round_number, is_final_round=False):
+    """Return the arena layout and theme data for the requested round."""
     if is_final_round:
         return FINAL_ROUND_STAGE
 
@@ -550,6 +556,7 @@ SPRITE_CONFIG = {
 
 
 class EffectSettings:
+    """Tunable defaults for particles, trails and screen shake."""
     # Instellingen voor visuele effecten.
 
     # Screen shake
